@@ -134,31 +134,10 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                         KeyAction::Navigator => {
                             let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
                             let _ = execute_tmux(socket, &["refresh-client", "-S"]);
-                            let bin_path = std::env::current_exe()
-                                .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or_else(|_| "mox".to_string());
-                            let _ = execute_tmux(
-                                socket,
-                                &[
-                                    "display-popup",
-                                    "-w",
-                                    "90%",
-                                    "-h",
-                                    "85%",
-                                    "-b",
-                                    "rounded",
-                                    "-T",
-                                    " Mox: Navigator ",
-                                    "-s",
-                                    "fg=#eceff4,bg=#2e3440",
-                                    "-S",
-                                    "fg=#81a1c1,bg=default",
-                                    "-E",
-                                    &format!("'{bin_path}' nav"),
-                                ],
-                            );
+                            crate::nav::run_navigator(socket)?;
                             break;
                         }
+
                         KeyAction::AgentToggle => {
                             let _ = crate::agent::toggle_agent_window(socket);
                             break;
@@ -220,9 +199,16 @@ fn build_display_items(node: &KeyNode) -> Vec<(String, String)> {
     skip_keys.insert("Backspace");
     skip_keys.insert("q");
     skip_keys.insert("Escape");
-    skip_keys.insert("Enter");
     skip_keys.insert("i");
     skip_keys.insert("M-m");
+
+    if !node
+        .children
+        .iter()
+        .any(|c| c.key == "Enter" && c.action != Some(KeyAction::ExitModal))
+    {
+        skip_keys.insert("Enter");
+    }
 
     if has_digits {
         for d in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] {

@@ -433,12 +433,8 @@ fn render_navigator(
         "[NORMAL]"
     };
     let query_display = format!(" / {}", app.search_query);
-    let mut bar_line = format!("{mode_badge}{query_display}");
-    if bar_line.len() < tree_width {
-        bar_line.push_str(&" ".repeat(tree_width - bar_line.len()));
-    } else {
-        bar_line.truncate(tree_width);
-    }
+    let bar_line = truncate_or_pad(&format!("{mode_badge}{query_display}"), tree_width);
+
     let _ = execute!(
         out,
         SetForegroundColor(Color::Rgb {
@@ -574,12 +570,7 @@ fn render_navigator(
             );
 
             let preview_line = if row < app.cached_preview_lines.len() {
-                let l = &app.cached_preview_lines[row];
-                if l.len() > preview_width {
-                    l[..preview_width].to_string()
-                } else {
-                    format!("{l}{}", " ".repeat(preview_width - l.len()))
-                }
+                truncate_or_pad(&app.cached_preview_lines[row], preview_width)
             } else {
                 " ".repeat(preview_width)
             };
@@ -693,10 +684,15 @@ fn format_tree_line(item: &TreeItem, max_w: usize) -> String {
         }
     };
 
-    if raw.len() < max_w {
-        format!("{raw}{}", " ".repeat(max_w - raw.len()))
+    truncate_or_pad(&raw, max_w)
+}
+
+fn truncate_or_pad(s: &str, target_width: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count < target_width {
+        format!("{s}{}", " ".repeat(target_width - char_count))
     } else {
-        raw[..max_w].to_string()
+        s.chars().take(target_width).collect()
     }
 }
 

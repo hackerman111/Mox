@@ -458,7 +458,9 @@ pub fn build_default_keymap() -> KeyNode {
         // Utilities & Scrolling
         KeyNode::new_action("[", "vim scrollback", KeyAction::CopyMode),
         KeyNode::new_action("T", "tea timer", KeyAction::TeaTimer),
-        KeyNode::new_action("t", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action("t", "tea timer", KeyAction::TeaTimer),
+        KeyNode::new_action("Enter", "tree navigator", KeyAction::Navigator),
+
 
         KeyNode::new_action(
             ":",

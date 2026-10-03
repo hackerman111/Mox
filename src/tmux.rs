@@ -160,7 +160,13 @@ fn generate_table_bindings(
             continue;
         }
 
-        if child.key == "q" || child.key == "Escape" || child.key == "Enter" {
+        if (child.key == "q" || child.key == "Escape")
+            || (child.key == "Enter"
+                && matches!(
+                    child.action,
+                    Some(KeyAction::ExitModal) | Some(KeyAction::SwitchTable(_)) | None
+                ))
+        {
             let cmd = match &child.action {
                 Some(KeyAction::ExitModal) => {
                     "{ set-option key-table root ; refresh-client -S }".to_string()

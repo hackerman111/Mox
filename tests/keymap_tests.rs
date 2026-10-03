@@ -34,17 +34,22 @@ fn test_root_keymap_completeness() {
         Some(KeyAction::AgentCreate)
     );
     assert_eq!(
-        root.find_child("t").unwrap().action,
+        root.find_child("Enter").unwrap().action,
         Some(KeyAction::Navigator)
     );
     assert_eq!(
-        root.find_child("[").unwrap().action,
-        Some(KeyAction::CopyMode)
+        root.find_child("t").unwrap().action,
+        Some(KeyAction::TeaTimer)
     );
     assert_eq!(
         root.find_child("T").unwrap().action,
         Some(KeyAction::TeaTimer)
     );
+    assert_eq!(
+        root.find_child("[").unwrap().action,
+        Some(KeyAction::CopyMode)
+    );
+
     assert_eq!(
         root.find_child("?").unwrap().action,
         Some(KeyAction::WhichKey)
@@ -235,13 +240,22 @@ fn test_navigator_exits_modal_mode() {
         "must contain agent-toggle: {mox_root_a}"
     );
 
-    let mox_root_big_a = script
+    let mox_root_enter = script
         .iter()
-        .find(|l| l.contains("bind-key -T mox A"))
-        .expect("mox A binding missing");
+        .find(|l| l.contains("bind-key -T mox Enter"))
+        .expect("mox Enter binding missing");
     assert!(
-        mox_root_big_a.contains("agent-create"),
-        "must contain agent-create: {mox_root_big_a}"
+        mox_root_enter.contains("nav"),
+        "must contain nav command: {mox_root_enter}"
+    );
+
+    let mox_root_t = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox t"))
+        .expect("mox t binding missing");
+    assert!(
+        mox_root_t.contains("tea"),
+        "must contain tea timer: {mox_root_t}"
     );
 }
 
