@@ -1,4 +1,6 @@
 use mox::keymap::build_default_keymap;
+use mox::nav::model::{TreeItem, fetch_tmux_snapshot};
+use mox::nav::ui::{execute_nav_tmux, switch_to_item};
 use mox::tmux::{apply_tmux_commands, execute_tmux, generate_init_script};
 use std::process::Command;
 
@@ -136,4 +138,78 @@ fn test_tmux_agent_creation_and_toggle_integration() {
     )
     .expect("display-message failed");
     assert_eq!(current_win_id.trim(), agent_win_id);
+}
+
+#[test]
+fn test_tmux_navigator_switch_and_actions_integration() {
+    let Some(server) = TmuxTestServer::new("mox-nav-action-test") else {
+        eprintln!("tmux binary not functional, skipping nav actions test");
+        return;
+    };
+
+    // 1. Create a second pane in window 1
+    execute_tmux(Some(&server.socket), &["split-window", "-v"]).expect("split-window failed");
+
+    // Create a second window
+    execute_tmux(Some(&server.socket), &["new-window", "-n", "second"]).expect("new-window failed");
+
+    // Fetch snapshot
+    let snapshot = fetch_tmux_snapshot(Some(&server.socket)).expect("fetch_tmux_snapshot failed");
+    assert_eq!(snapshot.len(), 1);
+    let session = &snapshot[0];
+    assert_eq!(session.windows.len(), 2);
+
+    let first_win = &session.windows[0];
+    assert_eq!(first_win.panes.len(), 2);
+    let first_pane = &first_win.panes[0];
+
+    // Currently we are in window 2. Switch to first pane of first window.
+    let pane_item = TreeItem::Pane {
+        session,
+        window: first_win,
+        pane: first_pane,
+    };
+    switch_to_item(Some(&server.socket), &pane_item).expect("switch_to_item failed");
+
+    // Verify window and pane selected
+    let active_win = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{window_id}"],
+    )
+    .expect("display-message failed");
+    assert_eq!(active_win.trim(), first_win.id);
+
+    let active_pane = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{pane_id}"],
+    )
+    .expect("display-message failed");
+    assert_eq!(active_pane.trim(), first_pane.id);
+
+    // 2. Test renaming window via execute_nav_tmux
+    execute_nav_tmux(
+        Some(&server.socket),
+        &format!("rename-window -t {} 'renamed_win'", first_win.id),
+    )
+    .expect("execute_nav_tmux rename failed");
+
+    let win_name = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{window_name}"],
+    )
+    .expect("display-message failed");
+    assert_eq!(win_name.trim(), "renamed_win");
+
+    // 3. Test killing pane via execute_nav_tmux
+    let second_pane = &first_win.panes[1];
+    execute_nav_tmux(
+        Some(&server.socket),
+        &format!("kill-pane -t {}", second_pane.id),
+    )
+    .expect("execute_nav_tmux kill-pane failed");
+
+    let fresh = fetch_tmux_snapshot(Some(&server.socket)).expect("fresh snapshot failed");
+    let fresh_first_win = &fresh[0].windows[0];
+    assert_eq!(fresh_first_win.panes.len(), 1);
+    assert_eq!(fresh_first_win.panes[0].id, first_pane.id);
 }

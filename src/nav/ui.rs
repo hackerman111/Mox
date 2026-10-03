@@ -31,6 +31,25 @@ impl Drop for RawModeGuard {
     }
 }
 
+/// Switches to the given tree item (session, window, or pane).
+pub fn switch_to_item(socket: Option<&str>, item: &TreeItem) -> Result<(), String> {
+    match item {
+        TreeItem::Session(s) => {
+            let _ = execute_tmux(socket, &["switch-client", "-t", &s.id]);
+        }
+        TreeItem::Window { window, .. } => {
+            let _ = execute_tmux(socket, &["select-window", "-t", &window.id]);
+            let _ = execute_tmux(socket, &["switch-client", "-t", &window.id]);
+        }
+        TreeItem::Pane { window, pane, .. } => {
+            let _ = execute_tmux(socket, &["select-pane", "-t", &pane.id]);
+            let _ = execute_tmux(socket, &["select-window", "-t", &window.id]);
+            let _ = execute_tmux(socket, &["switch-client", "-t", &pane.id]);
+        }
+    }
+    Ok(())
+}
+
 /// Generates the tmux command string to switch to a given tree item.
 pub fn format_switch_command(item: &TreeItem) -> String {
     match item {
@@ -191,7 +210,7 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
             if let Some((_, cmd)) = app.confirm_action.take() {
                 match key_event.code {
                     KeyCode::Char('y') | KeyCode::Char('Y') => {
-                        let _ = execute_shell_tmux(socket, &cmd);
+                        let _ = execute_nav_tmux(socket, &cmd);
                         // Refresh snapshot
                         if let Ok(fresh) = fetch_tmux_snapshot(socket) {
                             app.sessions = fresh;
@@ -215,7 +234,7 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
                             } else {
                                 format!("rename-window -t {target_id} '{new_name}'")
                             };
-                            let _ = execute_shell_tmux(socket, &cmd);
+                            let _ = execute_nav_tmux(socket, &cmd);
                             if let Ok(fresh) = fetch_tmux_snapshot(socket) {
                                 app.sessions = fresh;
                             }
@@ -253,8 +272,7 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
                     }
                     KeyCode::Enter => {
                         if let Some(item) = items.get(app.selected_index) {
-                            let cmd = format_switch_command(item);
-                            let _ = execute_shell_tmux(socket, &cmd);
+                            let _ = switch_to_item(socket, item);
                             break;
                         }
                     }
@@ -337,8 +355,7 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
                 }
                 KeyCode::Enter => {
                     if let Some(item) = items.get(app.selected_index) {
-                        let cmd = format_switch_command(item);
-                        let _ = execute_shell_tmux(socket, &cmd);
+                        let _ = switch_to_item(socket, item);
                         break;
                     }
                 }
@@ -390,8 +407,8 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
-fn execute_shell_tmux(socket: Option<&str>, cmd_str: &str) -> Result<String, String> {
-    execute_tmux(socket, &["run-shell", "-b", cmd_str])
+pub fn execute_nav_tmux(socket: Option<&str>, cmd_str: &str) -> Result<(), String> {
+    crate::tmux::apply_tmux_commands(socket, &[cmd_str.to_string()])
 }
 
 fn render_navigator(
