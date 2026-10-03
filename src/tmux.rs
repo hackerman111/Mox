@@ -264,12 +264,32 @@ fn generate_table_bindings(
                         child.key
                     ));
                 }
+                KeyAction::Navigator => {
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S ; display-popup -w 90% -h 85% -b rounded -T \" Mox: Navigator \" -s \"fg=#eceff4,bg=#2e3440\" -S \"fg=#81a1c1,bg=default\" -E \"'{bin_path}' nav\" }}",
+                        child.key
+                    ));
+                }
+
+                KeyAction::AgentToggle => {
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} run-shell \"'{bin_path}' agent-toggle\"",
+                        child.key
+                    ));
+                }
+                KeyAction::AgentCreate => {
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} run-shell \"'{bin_path}' agent-create\"",
+                        child.key
+                    ));
+                }
                 KeyAction::ExitModal => {
                     lines.push(format!(
                         "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S }}",
                         child.key
                     ));
                 }
+
             }
         }
     }

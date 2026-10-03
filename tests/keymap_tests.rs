@@ -26,6 +26,18 @@ fn test_root_keymap_completeness() {
 
     // Check modal actions
     assert_eq!(
+        root.find_child("a").unwrap().action,
+        Some(KeyAction::AgentToggle)
+    );
+    assert_eq!(
+        root.find_child("A").unwrap().action,
+        Some(KeyAction::AgentCreate)
+    );
+    assert_eq!(
+        root.find_child("t").unwrap().action,
+        Some(KeyAction::Navigator)
+    );
+    assert_eq!(
         root.find_child("[").unwrap().action,
         Some(KeyAction::CopyMode)
     );
@@ -75,24 +87,17 @@ fn test_sticky_window_and_resize_modes() {
 fn test_nested_path_resolution() {
     let root = build_default_keymap();
 
-    // g -> w (choose window)
+    // g -> w (tree navigator)
     let goto_w = root.resolve_path(&["g", "w"]);
     assert!(goto_w.is_some());
-    if let Some(KeyAction::Tmux(cmd)) = &goto_w.unwrap().action {
-        assert!(cmd.contains("choose-tree -Zw"));
-    } else {
-        panic!("Expected Tmux action for goto window");
-    }
+    assert_eq!(goto_w.unwrap().action, Some(KeyAction::Navigator));
 
-    // g -> s (choose session tree)
+    // g -> s (tree navigator)
     let goto_s = root.resolve_path(&["g", "s"]);
     assert!(goto_s.is_some());
-    if let Some(KeyAction::Tmux(cmd)) = &goto_s.unwrap().action {
-        assert!(cmd.contains("choose-tree -Zs"));
-    } else {
-        panic!("Expected Tmux action for choose session");
-    }
+    assert_eq!(goto_s.unwrap().action, Some(KeyAction::Navigator));
 }
+
 
 #[test]
 fn test_confirmations_for_dangerous_operations() {
@@ -190,7 +195,7 @@ fn test_clean_status_left() {
 }
 
 #[test]
-fn test_choose_tree_exits_modal_mode() {
+fn test_navigator_exits_modal_mode() {
     use mox::tmux::generate_init_script;
 
     let root = build_default_keymap();
@@ -202,11 +207,11 @@ fn test_choose_tree_exits_modal_mode() {
         .expect("mox_w s binding missing");
     assert!(
         mox_w_s.contains("set-option key-table root"),
-        "choose-tree must exit to root key-table: {mox_w_s}"
+        "navigator must exit to root key-table: {mox_w_s}"
     );
     assert!(
-        mox_w_s.contains("choose-tree -Zw"),
-        "must contain choose-tree -Zw: {mox_w_s}"
+        mox_w_s.contains("nav"),
+        "must contain nav command: {mox_w_s}"
     );
 
     let mox_s_s = script
@@ -215,13 +220,32 @@ fn test_choose_tree_exits_modal_mode() {
         .expect("mox_S s binding missing");
     assert!(
         mox_s_s.contains("set-option key-table root"),
-        "choose-tree must exit to root key-table: {mox_s_s}"
+        "navigator must exit to root key-table: {mox_s_s}"
     );
     assert!(
-        mox_s_s.contains("choose-tree -Zs"),
-        "must contain choose-tree -Zs: {mox_s_s}"
+        mox_s_s.contains("nav"),
+        "must contain nav command: {mox_s_s}"
+    );
+
+    let mox_root_a = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox a"))
+        .expect("mox a binding missing");
+    assert!(
+        mox_root_a.contains("agent-toggle"),
+        "must contain agent-toggle: {mox_root_a}"
+    );
+
+    let mox_root_big_a = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox A"))
+        .expect("mox A binding missing");
+    assert!(
+        mox_root_big_a.contains("agent-create"),
+        "must contain agent-create: {mox_root_big_a}"
     );
 }
+
 
 #[test]
 fn test_popup_border_style_clean_background() {

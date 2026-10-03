@@ -18,9 +18,16 @@ pub enum KeyAction {
     WhichKey,
     /// Launch the built-in tea timer.
     TeaTimer,
+    /// Launch the unified Vim-like fuzzy tree navigator.
+    Navigator,
+    /// Toggle between work window and AI agent window.
+    AgentToggle,
+    /// Create a new AI agent window.
+    AgentCreate,
     /// Exit modal mode back to normal tmux root input.
     ExitModal,
 }
+
 
 /// A node in the hierarchical keymap tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,9 +212,11 @@ pub fn build_default_keymap() -> KeyNode {
         ),
         KeyNode::new_action(
             "s",
-            "choose window",
-            KeyAction::Tmux("choose-tree -Zw".into()),
+            "tree navigator",
+            KeyAction::Navigator,
         ),
+        KeyNode::new_action("a", "agent toggle", KeyAction::AgentToggle),
+        KeyNode::new_action("A", "agent create", KeyAction::AgentCreate),
         KeyNode::new_action(
             "v",
             "split vertical",
@@ -259,9 +268,10 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action(
             "t",
-            "choose window tree",
-            KeyAction::Tmux("choose-tree -Zw".into()),
+            "tree navigator",
+            KeyAction::Navigator,
         ),
+
         KeyNode::new_action("r", "resize mode", KeyAction::SwitchTable("mox_r".into())),
         KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
         KeyNode::new_action(
@@ -307,13 +317,13 @@ pub fn build_default_keymap() -> KeyNode {
         ),
         KeyNode::new_action(
             "s",
-            "choose session",
-            KeyAction::Tmux("choose-tree -Zs".into()),
+            "tree navigator",
+            KeyAction::Navigator,
         ),
         KeyNode::new_action(
             "t",
-            "choose session",
-            KeyAction::Tmux("choose-tree -Zs".into()),
+            "tree navigator",
+            KeyAction::Navigator,
         ),
         KeyNode::new_action(
             "h",
@@ -341,13 +351,13 @@ pub fn build_default_keymap() -> KeyNode {
     let goto_children = vec![
         KeyNode::new_action(
             "w",
-            "choose window",
-            KeyAction::Tmux("choose-tree -Zw".into()),
+            "tree navigator",
+            KeyAction::Navigator,
         ),
         KeyNode::new_action(
             "s",
-            "choose session",
-            KeyAction::Tmux("choose-tree -Zs".into()),
+            "tree navigator",
+            KeyAction::Navigator,
         ),
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action(
@@ -374,6 +384,9 @@ pub fn build_default_keymap() -> KeyNode {
     // 5. Root Modal Keymap ('mox' / NORMAL mode)
     // -------------------------------------------------------------
     let mut root_children = vec![
+        // AI Agents
+        KeyNode::new_action("a", "agent toggle", KeyAction::AgentToggle),
+        KeyNode::new_action("A", "agent create", KeyAction::AgentCreate),
         // Navigation: smart move - if multiple panes, switch pane; if 1 pane, switch window!
         KeyNode::new_action(
             "h",
@@ -462,7 +475,8 @@ pub fn build_default_keymap() -> KeyNode {
         // Utilities & Scrolling
         KeyNode::new_action("[", "vim scrollback", KeyAction::CopyMode),
         KeyNode::new_action("T", "tea timer", KeyAction::TeaTimer),
-        KeyNode::new_action("t", "tea timer", KeyAction::TeaTimer),
+        KeyNode::new_action("t", "tree navigator", KeyAction::Navigator),
+
         KeyNode::new_action(
             ":",
             "command prompt",

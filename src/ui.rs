@@ -131,9 +131,47 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                             crate::tea::run_tea_timer()?;
                             break;
                         }
+                        KeyAction::Navigator => {
+                            let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
+                            let _ = execute_tmux(socket, &["refresh-client", "-S"]);
+                            let bin_path = std::env::current_exe()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or_else(|_| "mox".to_string());
+                            let _ = execute_tmux(
+                                socket,
+                                &[
+                                    "display-popup",
+                                    "-w",
+                                    "90%",
+                                    "-h",
+                                    "85%",
+                                    "-b",
+                                    "rounded",
+                                    "-T",
+                                    " Mox: Navigator ",
+                                    "-s",
+
+                                    "fg=#eceff4,bg=#2e3440",
+                                    "-S",
+                                    "fg=#81a1c1,bg=default",
+                                    "-E",
+                                    &format!("'{bin_path}' nav"),
+                                ],
+                            );
+                            break;
+                        }
+                        KeyAction::AgentToggle => {
+                            let _ = crate::agent::toggle_agent_window(socket);
+                            break;
+                        }
+                        KeyAction::AgentCreate => {
+                            let _ = crate::agent::create_agent_window(socket);
+                            break;
+                        }
                         KeyAction::WhichKey => {
                             continue;
                         }
+
                         KeyAction::ExitModal => {
                             let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
                             let _ = execute_tmux(socket, &["refresh-client", "-S"]);

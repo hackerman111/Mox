@@ -46,7 +46,29 @@ enum Commands {
 
     /// Launch the built-in Gongfu Cha tea timer
     Tea,
+
+    /// Launch the unified Vim-like fuzzy tree navigator
+    Nav {
+        /// Tmux socket name (-L)
+        #[arg(short, long)]
+        socket: Option<String>,
+    },
+
+    /// Create a new AI agent window and jump to it
+    AgentCreate {
+        /// Tmux socket name (-L)
+        #[arg(short, long)]
+        socket: Option<String>,
+    },
+
+    /// Toggle between current work window and AI agent window
+    AgentToggle {
+        /// Tmux socket name (-L)
+        #[arg(short, long)]
+        socket: Option<String>,
+    },
 }
+
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -98,7 +120,26 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        Commands::Nav { socket } => {
+            if let Err(e) = mox::nav::run_navigator(socket.as_deref()) {
+                eprintln!("Error in navigator: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+        Commands::AgentCreate { socket } => {
+            if let Err(e) = mox::agent::create_agent_window(socket.as_deref()) {
+                eprintln!("Error creating agent window: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+        Commands::AgentToggle { socket } => {
+            if let Err(e) = mox::agent::toggle_agent_window(socket.as_deref()) {
+                eprintln!("Error toggling agent window: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
     }
 
     ExitCode::SUCCESS
 }
+
