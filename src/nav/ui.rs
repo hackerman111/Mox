@@ -1,9 +1,7 @@
 //! Interactive dual-pane TUI tree navigator and live preview for tmux.
 
 use crate::nav::fuzzy::filter_sessions;
-use crate::nav::model::{
-    SessionInfo, TreeItem, fetch_tmux_snapshot, flatten_tree,
-};
+use crate::nav::model::{SessionInfo, TreeItem, fetch_tmux_snapshot, flatten_tree};
 use crate::tmux::execute_tmux;
 use crossterm::{
     cursor,
@@ -39,7 +37,10 @@ pub fn format_switch_command(item: &TreeItem) -> String {
         TreeItem::Session(s) => format!("switch-client -t {}", s.id),
         TreeItem::Window { window, .. } => format!("select-window -t {}", window.id),
         TreeItem::Pane { window, pane, .. } => {
-            format!("select-pane -t {} ; select-window -t {}", pane.id, window.id)
+            format!(
+                "select-pane -t {} ; select-window -t {}",
+                pane.id, window.id
+            )
         }
     }
 }
@@ -122,12 +123,16 @@ impl NavigatorApp {
             TreeItem::Window { session, window } => {
                 let sid = session.id.clone();
                 let wid = window.id.clone();
-                if let Some(session) = self.sessions.iter_mut().find(|sess| sess.id == sid) {
-                    if let Some(win) = session.windows.iter_mut().find(|w| w.id == wid) {
-                        win.collapsed = !win.collapsed;
-                    }
+                if let Some(win) = self
+                    .sessions
+                    .iter_mut()
+                    .find(|sess| sess.id == sid)
+                    .and_then(|sess| sess.windows.iter_mut().find(|w| w.id == wid))
+                {
+                    win.collapsed = !win.collapsed;
                 }
             }
+
             TreeItem::Pane { .. } => {}
         }
     }
@@ -163,9 +168,8 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
 
         if app.show_preview && active_pane != app.cached_preview_pane && !active_pane.is_empty() {
             app.cached_preview_pane = active_pane.clone();
-            let preview_raw =
-                execute_tmux(socket, &["capture-pane", "-ep", "-t", &active_pane])
-                    .unwrap_or_default();
+            let preview_raw = execute_tmux(socket, &["capture-pane", "-ep", "-t", &active_pane])
+                .unwrap_or_default();
             app.cached_preview_lines = preview_raw.lines().map(|s| s.to_string()).collect();
         }
 
@@ -254,16 +258,13 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
                             break;
                         }
                     }
-                    KeyCode::Down => {
-                        if !items.is_empty() && app.selected_index + 1 < items.len() {
-                            app.selected_index += 1;
-                        }
+                    KeyCode::Down if !items.is_empty() && app.selected_index + 1 < items.len() => {
+                        app.selected_index += 1;
                     }
-                    KeyCode::Up => {
-                        if app.selected_index > 0 {
-                            app.selected_index -= 1;
-                        }
+                    KeyCode::Up if app.selected_index > 0 => {
+                        app.selected_index -= 1;
                     }
+
                     KeyCode::Tab => {
                         app.toggle_selected_collapse(app.selected_index);
                     }
@@ -673,7 +674,10 @@ fn format_tree_line(item: &TreeItem, max_w: usize) -> String {
             let icon = if window.collapsed { "▶" } else { "▼" };
             let agent = if window.is_agent { " [AI]" } else { "" };
             let active = if window.active { " *" } else { "" };
-            format!("  ├─ {icon} {}: {}{agent}{active}", window.index, window.name)
+            format!(
+                "  ├─ {icon} {}: {}{agent}{active}",
+                window.index, window.name
+            )
         }
         TreeItem::Pane { pane, .. } => {
             let active = if pane.active { " *" } else { "" };

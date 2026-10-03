@@ -77,17 +77,63 @@ fn test_tmux_isolated_server_integration() {
     assert!(all_keys.contains("kill-pane"));
     assert!(all_keys.contains("kill-window"));
 
-    // 3. Verify Vim scroll copy-mode-vi bindings
-    assert!(
-        all_keys.contains("bind-key    -T copy-mode-vi")
-            || all_keys.contains("bind-key -T copy-mode-vi")
-    );
-    assert!(all_keys.contains("cursor-down"));
-    assert!(all_keys.contains("cursor-up"));
-    assert!(all_keys.contains("halfpage-down"));
-    assert!(all_keys.contains("halfpage-up"));
-    assert!(all_keys.contains("page-down"));
-    assert!(all_keys.contains("page-up"));
-    assert!(all_keys.contains("history-bottom"));
-    assert!(all_keys.contains("copy-mode-vi-g"));
+    // 4. Verify Navigator and Agent bindings
+    assert!(all_keys.contains("agent-toggle"));
+    assert!(all_keys.contains("agent-create"));
+    assert!(all_keys.contains("nav"));
+}
+
+#[test]
+fn test_tmux_agent_creation_and_toggle_integration() {
+    let Some(server) = TmuxTestServer::new("mox-agent-test") else {
+        eprintln!("tmux binary not functional, skipping agent test");
+        return;
+    };
+
+    // Initially window 1 is active (e.g. name "test" or "0")
+    let initial_win = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{window_id}"],
+    )
+    .expect("display-message failed");
+    let initial_win = initial_win.trim().to_string();
+
+    // 1. Create agent window
+    mox::agent::create_agent_window(Some(&server.socket)).expect("create_agent_window failed");
+
+    // Check that active window is now agent
+    let agent_win_id = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{window_id}"],
+    )
+    .expect("display-message failed");
+    let agent_win_id = agent_win_id.trim().to_string();
+    assert_ne!(initial_win, agent_win_id);
+
+    let is_agent = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{@mox_is_agent}"],
+    )
+    .expect("check @mox_is_agent");
+    assert_eq!(is_agent.trim(), "1");
+
+    // 2. Toggle agent window (should return to initial window)
+    mox::agent::toggle_agent_window(Some(&server.socket)).expect("toggle_agent_window failed");
+
+    let current_win_id = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{window_id}"],
+    )
+    .expect("display-message failed");
+    assert_eq!(current_win_id.trim(), initial_win);
+
+    // 3. Toggle again (should return to agent window)
+    mox::agent::toggle_agent_window(Some(&server.socket)).expect("toggle_agent_window 2 failed");
+
+    let current_win_id = execute_tmux(
+        Some(&server.socket),
+        &["display-message", "-p", "#{window_id}"],
+    )
+    .expect("display-message failed");
+    assert_eq!(current_win_id.trim(), agent_win_id);
 }

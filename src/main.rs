@@ -69,7 +69,6 @@ enum Commands {
     },
 }
 
-
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -142,4 +141,3 @@ fn main() -> ExitCode {
 
     ExitCode::SUCCESS
 }
-

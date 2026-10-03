@@ -150,7 +150,6 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                                     "-T",
                                     " Mox: Navigator ",
                                     "-s",
-
                                     "fg=#eceff4,bg=#2e3440",
                                     "-S",
                                     "fg=#81a1c1,bg=default",

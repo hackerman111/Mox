@@ -98,7 +98,6 @@ fn test_nested_path_resolution() {
     assert_eq!(goto_s.unwrap().action, Some(KeyAction::Navigator));
 }
 
-
 #[test]
 fn test_confirmations_for_dangerous_operations() {
     let root = build_default_keymap();
@@ -245,7 +244,6 @@ fn test_navigator_exits_modal_mode() {
         "must contain agent-create: {mox_root_big_a}"
     );
 }
-
 
 #[test]
 fn test_popup_border_style_clean_background() {

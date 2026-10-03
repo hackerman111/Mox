@@ -5,5 +5,3 @@ pub mod model;
 pub mod ui;
 
 pub use ui::run_navigator;
-
-

@@ -28,7 +28,6 @@ pub enum KeyAction {
     ExitModal,
 }
 
-
 /// A node in the hierarchical keymap tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyNode {
@@ -315,16 +314,8 @@ pub fn build_default_keymap() -> KeyNode {
             "detach client",
             KeyAction::Tmux("detach-client".into()),
         ),
-        KeyNode::new_action(
-            "s",
-            "tree navigator",
-            KeyAction::Navigator,
-        ),
-        KeyNode::new_action(
-            "t",
-            "tree navigator",
-            KeyAction::Navigator,
-        ),
+        KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action("t", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action(
             "h",
             "prev session",
@@ -349,16 +340,8 @@ pub fn build_default_keymap() -> KeyNode {
     // 4. Go To Submenu ('g')
     // -------------------------------------------------------------
     let goto_children = vec![
-        KeyNode::new_action(
-            "w",
-            "tree navigator",
-            KeyAction::Navigator,
-        ),
-        KeyNode::new_action(
-            "s",
-            "tree navigator",
-            KeyAction::Navigator,
-        ),
+        KeyNode::new_action("w", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action(
             "h",

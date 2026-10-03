@@ -50,9 +50,7 @@ pub fn calculate_next_agent_name(existing_names: &[String]) -> String {
 /// and switches to root (insert) mode.
 pub fn create_agent_window(socket: Option<&str>) -> Result<(), String> {
     // 1. Record current window ID as previous window
-    if let Ok(current_win_id) =
-        execute_tmux(socket, &["display-message", "-p", "#{window_id}"])
-    {
+    if let Ok(current_win_id) = execute_tmux(socket, &["display-message", "-p", "#{window_id}"]) {
         let _ = execute_tmux(
             socket,
             &["set-option", "@mox_prev_window", current_win_id.trim()],
@@ -60,8 +58,8 @@ pub fn create_agent_window(socket: Option<&str>) -> Result<(), String> {
     }
 
     // 2. Query existing window names in current session
-    let existing_raw = execute_tmux(socket, &["list-windows", "-F", "#{window_name}"])
-        .unwrap_or_default();
+    let existing_raw =
+        execute_tmux(socket, &["list-windows", "-F", "#{window_name}"]).unwrap_or_default();
     let existing_names: Vec<String> = existing_raw
         .lines()
         .map(|s| s.trim().to_string())
@@ -71,8 +69,8 @@ pub fn create_agent_window(socket: Option<&str>) -> Result<(), String> {
     let win_name = calculate_next_agent_name(&existing_names);
 
     // 3. Check for custom agent command in @mox_agent_cmd
-    let custom_cmd = execute_tmux(socket, &["show-option", "-qv", "@mox_agent_cmd"])
-        .unwrap_or_default();
+    let custom_cmd =
+        execute_tmux(socket, &["show-option", "-qv", "@mox_agent_cmd"]).unwrap_or_default();
     let custom_cmd = custom_cmd.trim();
 
     // 4. Create new window
@@ -106,8 +104,8 @@ pub fn toggle_agent_window(socket: Option<&str>) -> Result<(), String> {
 
     if is_agent {
         // We are currently in an agent window -> switch back to previous window
-        let prev_win = execute_tmux(socket, &["show-option", "-qv", "@mox_prev_window"])
-            .unwrap_or_default();
+        let prev_win =
+            execute_tmux(socket, &["show-option", "-qv", "@mox_prev_window"]).unwrap_or_default();
         let prev_win = prev_win.trim();
 
         let windows_raw =
@@ -129,10 +127,7 @@ pub fn toggle_agent_window(socket: Option<&str>) -> Result<(), String> {
     } else {
         // We are in a normal work window -> remember it and switch to agent window
         if !current_win_id.is_empty() {
-            let _ = execute_tmux(
-                socket,
-                &["set-option", "@mox_prev_window", current_win_id],
-            );
+            let _ = execute_tmux(socket, &["set-option", "@mox_prev_window", current_win_id]);
         }
 
         // Find agent windows in current session
@@ -145,8 +140,7 @@ pub fn toggle_agent_window(socket: Option<&str>) -> Result<(), String> {
             ],
         )?;
         let windows = parse_window_list_for_agents(&list_raw);
-        let agent_windows: Vec<&WindowSummary> =
-            windows.iter().filter(|w| w.is_agent).collect();
+        let agent_windows: Vec<&WindowSummary> = windows.iter().filter(|w| w.is_agent).collect();
 
         if let Some(agent_win) = agent_windows.last() {
             execute_tmux(socket, &["select-window", "-t", &agent_win.id])?;

@@ -38,10 +38,8 @@ pub fn fuzzy_match(target: &str, query: &str) -> Option<i64> {
             }
 
             // Consecutive match bonus
-            if let Some(last) = last_match_idx {
-                if last + 1 == t_idx {
-                    score += 10;
-                }
+            if last_match_idx == Some(t_idx.saturating_sub(1)) {
+                score += 10;
             }
 
             last_match_idx = Some(t_idx);

@@ -289,7 +289,6 @@ fn generate_table_bindings(
                         child.key
                     ));
                 }
-
             }
         }
     }

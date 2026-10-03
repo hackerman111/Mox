@@ -73,4 +73,11 @@
 | `g w l` | `select-window -t :+` | `select-window -t :+` | Done |
 | `g w i` | `command-prompt -p index "select-window -t ':%%'"` | Window index prompt | Done |
 | `g w o` | `last-window` | `last-window` | Done |
-| `g w t` | `choose-tree -Zw` | `choose-tree -Zw` | Done |
+| `g w t` | `choose-tree -Zw` | `Mox Navigator` | Done |
+| `<root> a` | *(mox extension)* | AI Agent fast-toggle | Done |
+| `<root> A` | *(mox extension)* | AI Agent window create | Done |
+| `<root> t` | *(mox extension)* | Vim-like Fuzzy Tree Navigator | Done |
+| `w s` / `w t` | `choose-tree -Zw` | Vim-like Fuzzy Tree Navigator | Done |
+| `S s` / `S t` | `choose-tree -Zs` | Vim-like Fuzzy Tree Navigator | Done |
+| `g s` / `g w` | `choose-tree` | Vim-like Fuzzy Tree Navigator | Done |
+
