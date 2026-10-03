@@ -4,4 +4,5 @@ pub mod nav;
 pub mod scroll;
 pub mod tea;
 pub mod tmux;
+pub mod tui;
 pub mod ui;
