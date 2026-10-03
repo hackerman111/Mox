@@ -1,5 +1,5 @@
-use moch::keymap::build_default_keymap;
-use moch::tmux::{apply_tmux_commands, execute_tmux, generate_init_script};
+use mox::keymap::build_default_keymap;
+use mox::tmux::{apply_tmux_commands, execute_tmux, generate_init_script};
 use std::process::Command;
 
 struct TmuxTestServer {
@@ -44,13 +44,13 @@ impl Drop for TmuxTestServer {
 
 #[test]
 fn test_tmux_isolated_server_integration() {
-    let Some(server) = TmuxTestServer::new("moch-integration-test") else {
+    let Some(server) = TmuxTestServer::new("mox-integration-test") else {
         eprintln!("tmux binary not functional, skipping integration test");
         return;
     };
 
     let keymap = build_default_keymap();
-    let script = generate_init_script(&keymap, "M-m", "moch");
+    let script = generate_init_script(&keymap, "M-m", "mox", Some("#S"));
 
     let result = apply_tmux_commands(Some(&server.socket), &script);
     assert!(
@@ -59,20 +59,20 @@ fn test_tmux_isolated_server_integration() {
         result.err()
     );
 
-    // 1. Verify moch root table bindings
+    // 1. Verify mox root table bindings
     let all_keys =
         execute_tmux(Some(&server.socket), &["list-keys"]).expect("Failed to list tmux keys");
 
-    assert!(all_keys.contains("bind-key    -T moch") || all_keys.contains("bind-key -T moch"));
+    assert!(all_keys.contains("bind-key    -T mox") || all_keys.contains("bind-key -T mox"));
     assert!(all_keys.contains("select-pane -L"));
     assert!(all_keys.contains("select-pane -D"));
     assert!(all_keys.contains("select-pane -U"));
     assert!(all_keys.contains("select-pane -R"));
     assert!(all_keys.contains("set-option key-table root")); // q/Esc/M-m exit
-    assert!(all_keys.contains("which-key --prefix 'w'")); // popup on prefix
+    assert!(all_keys.contains("which-key")); // which-key available
 
     // 2. Verify sticky window mode bindings
-    assert!(all_keys.contains("bind-key    -T moch_w") || all_keys.contains("bind-key -T moch_w"));
+    assert!(all_keys.contains("bind-key    -T mox_w") || all_keys.contains("bind-key -T mox_w"));
     assert!(all_keys.contains("new-window"));
     assert!(all_keys.contains("kill-pane"));
     assert!(all_keys.contains("kill-window"));

@@ -245,7 +245,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "moch"
+name = "mox"
 version = "0.1.0"
 dependencies = [
  "clap",

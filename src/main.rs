@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
-use moch::keymap::build_default_keymap;
-use moch::tea::run_tea_timer;
-use moch::tmux::{apply_tmux_commands, generate_init_script};
-use moch::ui::run_which_key;
+use mox::keymap::build_default_keymap;
+use mox::tea::run_tea_timer;
+use mox::tmux::{apply_tmux_commands, generate_init_script};
+use mox::ui::run_which_key;
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
-#[command(name = "moch")]
+#[command(name = "Mox")]
 #[command(
     about = "Vim-style modal control, which-key, and tea timer for tmux",
     version
@@ -18,7 +18,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Generate or apply tmux configuration for moch
+    /// Generate or apply tmux configuration for Mox
     Init {
         /// Entry key to toggle modal mode (default: M-m)
         #[arg(short, long, default_value = "M-m")]
@@ -60,8 +60,16 @@ fn main() -> ExitCode {
             let keymap = build_default_keymap();
             let bin_path = std::env::current_exe()
                 .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| "moch".to_string());
-            let script_lines = generate_init_script(&keymap, &entry_key, &bin_path);
+                .unwrap_or_else(|_| "mox".to_string());
+            let current_status_left =
+                mox::tmux::execute_tmux(socket.as_deref(), &["show-option", "-gv", "status-left"])
+                    .ok();
+            let script_lines = generate_init_script(
+                &keymap,
+                &entry_key,
+                &bin_path,
+                current_status_left.as_deref(),
+            );
 
             if apply {
                 if let Err(e) = apply_tmux_commands(socket.as_deref(), &script_lines) {
