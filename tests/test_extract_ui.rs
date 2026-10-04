@@ -125,3 +125,12 @@ fn test_extract_state_selection_navigation() {
     state.move_selection_up();
     assert_eq!(state.selected_index, 0);
 }
+
+#[test]
+fn test_extract_state_picker_mode() {
+    use mox::extract::ui::PickerMode;
+    let mut state = ExtractState::new(vec![]);
+    assert_eq!(state.mode, PickerMode::Search);
+    state.mode = PickerMode::Normal;
+    assert_eq!(state.mode, PickerMode::Normal);
+}

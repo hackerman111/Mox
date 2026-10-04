@@ -29,6 +29,15 @@ const CATEGORIES: [Option<EntityKind>; 6] = [
     Some(EntityKind::Command),
 ];
 
+/// The interaction mode of the extract picker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickerMode {
+    /// Active search input (characters typed go to the query).
+    Search,
+    /// Vim-style navigation (keys act as single-stroke commands: y=copy, q=quit, i=search).
+    Normal,
+}
+
 /// Interactive state for the extraction picker.
 pub struct ExtractState {
     /// All extracted tokens available in the session.
@@ -41,6 +50,8 @@ pub struct ExtractState {
     pub selected_index: usize,
     /// Currently active entity category filter, or `None` for all entities.
     pub current_category: Option<EntityKind>,
+    /// Active interaction mode (Search or Normal).
+    pub mode: PickerMode,
 }
 
 impl ExtractState {
@@ -52,6 +63,7 @@ impl ExtractState {
             filtered_indices: Vec::new(),
             selected_index: 0,
             current_category: None,
+            mode: PickerMode::Search,
         };
         state.apply_filter();
         state
@@ -155,7 +167,12 @@ pub fn launch_extract_popup(socket: Option<&str>, lines: usize) -> std::io::Resu
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "mox".to_string());
 
-    let mut cmd = format!("{bin_path} extract --lines {lines}");
+    let target_pane = execute_tmux(socket, &["display-message", "-p", "#{pane_id}"])
+        .unwrap_or_else(|_| "%0".to_string())
+        .trim()
+        .to_string();
+
+    let mut cmd = format!("{bin_path} extract --lines {lines} --target-pane '{target_pane}'");
     if let Some(sock) = socket {
         cmd.push_str(&format!(" --socket '{sock}'"));
     }
@@ -168,11 +185,19 @@ pub fn launch_extract_popup(socket: Option<&str>, lines: usize) -> std::io::Resu
 }
 
 /// Runs the interactive extract fuzzy picker inside the terminal.
-pub fn run_extract_picker(socket: Option<&str>, lines: usize) -> std::io::Result<()> {
-    let active_pane_id = execute_tmux(socket, &["display-message", "-p", "#{pane_id}"])
-        .unwrap_or_else(|_| "%0".to_string())
-        .trim()
-        .to_string();
+pub fn run_extract_picker(
+    socket: Option<&str>,
+    lines: usize,
+    target_pane: Option<&str>,
+) -> std::io::Result<()> {
+    let active_pane_id = if let Some(tp) = target_pane {
+        tp.trim().to_string()
+    } else {
+        execute_tmux(socket, &["display-message", "-p", "#{pane_id}"])
+            .unwrap_or_else(|_| "%0".to_string())
+            .trim()
+            .to_string()
+    };
 
     let lines_arg = format!("-{lines}");
     let raw = execute_tmux(socket, &["capture-pane", "-p", "-S", &lines_arg])
@@ -225,41 +250,18 @@ pub fn run_extract_picker(socket: Option<&str>, lines: usize) -> std::io::Result
                             break;
                         }
                     }
-                    _ => {
-                        // Cancel pending chord
-                    }
+                    _ => {}
                 }
                 continue;
             }
 
+            // Global actions that work regardless of mode:
             match key_event.code {
-                KeyCode::Esc => {
-                    break;
-                }
                 KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
                 }
-                KeyCode::Char('q')
-                    if state.query.is_empty()
-                        || key_event.modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    break;
-                }
-                KeyCode::Enter => {
-                    if let Some(tok) = state.selected_token() {
-                        let mut args = vec!["send-keys", "-l"];
-                        if !active_pane_id.is_empty() {
-                            args.push("-t");
-                            args.push(&active_pane_id);
-                        }
-                        args.push(&tok.clean_text);
-                        let _ = execute_tmux(socket, &args);
-                        break;
-                    }
-                }
                 KeyCode::Char('y')
-                    if state.query.is_empty()
-                        || key_event.modifiers.contains(KeyModifiers::CONTROL)
+                    if key_event.modifiers.contains(KeyModifiers::CONTROL)
                         || key_event.modifiers.contains(KeyModifiers::ALT) =>
                 {
                     if let Some(tok) = state.selected_token() {
@@ -267,11 +269,55 @@ pub fn run_extract_picker(socket: Option<&str>, lines: usize) -> std::io::Result
                         break;
                     }
                 }
-                KeyCode::Char('g')
-                    if state.query.is_empty()
-                        || key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                KeyCode::Char('o')
+                    if key_event.modifiers.contains(KeyModifiers::CONTROL)
+                        || key_event.modifiers.contains(KeyModifiers::ALT) =>
                 {
-                    pending_g = true;
+                    if let Some(tok) = state.selected_token() {
+                        open_in_editor(socket, &tok.clean_text, tok.line_number);
+                        break;
+                    }
+                }
+                KeyCode::Char('x')
+                    if key_event.modifiers.contains(KeyModifiers::CONTROL)
+                        || key_event.modifiers.contains(KeyModifiers::ALT) =>
+                {
+                    if let Some(tok) = state.selected_token() {
+                        open_in_browser(&tok.clean_text);
+                        break;
+                    }
+                }
+                KeyCode::Enter => {
+                    if let Some(tok) = state.selected_token() {
+                        // 1. Reset target pane's key-table to root
+                        let _ = execute_tmux(
+                            socket,
+                            &["set-option", "-t", &active_pane_id, "key-table", "root"],
+                        );
+                        // 2. Cancel copy-mode if pane was in copy-mode
+                        let _ = execute_tmux(
+                            socket,
+                            &["send-keys", "-t", &active_pane_id, "-X", "cancel"],
+                        );
+                        // 3. Paste cleanly via tmux paste-buffer (bracketed paste, safe from shell execution or key evaluation)
+                        let _ = execute_tmux(
+                            socket,
+                            &["set-buffer", "-b", "mox-paste", "--", &tok.clean_text],
+                        );
+                        let _ = execute_tmux(
+                            socket,
+                            &[
+                                "paste-buffer",
+                                "-b",
+                                "mox-paste",
+                                "-p",
+                                "-t",
+                                &active_pane_id,
+                            ],
+                        );
+                        let _ = execute_tmux(socket, &["delete-buffer", "-b", "mox-paste"]);
+                        break;
+                    }
                 }
                 KeyCode::Tab => {
                     state.cycle_category_forward();
@@ -281,11 +327,11 @@ pub fn run_extract_picker(socket: Option<&str>, lines: usize) -> std::io::Result
                     state.cycle_category_backward();
                     scroll_offset = 0;
                 }
-                KeyCode::Up => {
+                KeyCode::Up if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     state.move_selection_up();
                     adjust_scroll(&state, &mut scroll_offset, term_h);
                 }
-                KeyCode::Down => {
+                KeyCode::Down if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     state.move_selection_down();
                     adjust_scroll(&state, &mut scroll_offset, term_h);
                 }
@@ -297,17 +343,80 @@ pub fn run_extract_picker(socket: Option<&str>, lines: usize) -> std::io::Result
                     state.move_selection_down();
                     adjust_scroll(&state, &mut scroll_offset, term_h);
                 }
-                KeyCode::Backspace => {
-                    state.query.pop();
-                    state.apply_filter();
-                    adjust_scroll(&state, &mut scroll_offset, term_h);
+                _ => {
+                    // Mode-specific input handling:
+                    match state.mode {
+                        PickerMode::Search => match key_event.code {
+                            KeyCode::Esc => {
+                                if state.query.is_empty() {
+                                    break;
+                                } else {
+                                    state.mode = PickerMode::Normal;
+                                }
+                            }
+                            KeyCode::Up => {
+                                state.move_selection_up();
+                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                            }
+                            KeyCode::Down => {
+                                state.move_selection_down();
+                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                            }
+                            KeyCode::Backspace => {
+                                state.query.pop();
+                                state.apply_filter();
+                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                            }
+                            KeyCode::Char(c) => {
+                                state.query.push(c);
+                                state.apply_filter();
+                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                            }
+                            _ => {}
+                        },
+                        PickerMode::Normal => match key_event.code {
+                            KeyCode::Esc | KeyCode::Char('q') => {
+                                break;
+                            }
+                            KeyCode::Char('y') => {
+                                if let Some(tok) = state.selected_token() {
+                                    crate::flash::ui::copy_to_clipboard_and_tmux(
+                                        socket,
+                                        &tok.clean_text,
+                                    );
+                                    break;
+                                }
+                            }
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                state.move_selection_down();
+                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                state.move_selection_up();
+                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                            }
+                            KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Char('/') => {
+                                state.mode = PickerMode::Search;
+                            }
+                            KeyCode::Char('g') => {
+                                pending_g = true;
+                            }
+                            KeyCode::Char('o') => {
+                                if let Some(tok) = state.selected_token() {
+                                    open_in_editor(socket, &tok.clean_text, tok.line_number);
+                                    break;
+                                }
+                            }
+                            KeyCode::Char('x') => {
+                                if let Some(tok) = state.selected_token() {
+                                    open_in_browser(&tok.clean_text);
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        },
+                    }
                 }
-                KeyCode::Char(c) => {
-                    state.query.push(c);
-                    state.apply_filter();
-                    adjust_scroll(&state, &mut scroll_offset, term_h);
-                }
-                _ => {}
             }
         }
     }
@@ -353,16 +462,20 @@ fn render_extract_ui(
         SetForegroundColor(fg),
     )?;
 
-    // 1. Header (> query [N matches])
+    // 1. Header (> query [N matches] [MODE])
     let total_matches = state.filtered_indices.len();
     let g_indicator = if pending_g {
         " (g: f/o=editor, x=browser)"
     } else {
         ""
     };
+    let mode_str = match state.mode {
+        PickerMode::Search => "[SEARCH]",
+        PickerMode::Normal => "[NORMAL]",
+    };
     let header_text = format!(
-        "> {} [{} matches]{}",
-        state.query, total_matches, g_indicator
+        "> {} [{} matches] {} {}",
+        state.query, total_matches, mode_str, g_indicator
     );
     let header_line = truncate_str(&header_text, width);
     execute!(
@@ -535,8 +648,12 @@ fn render_extract_ui(
 
     // 5. Footer actions
     let footer_row = height.saturating_sub(1) as u16;
-    let footer_text =
-        "<Enter> Paste | <y> Copy | <g f/o> Editor | <g x> Browser | <Tab> Tab | <Esc/q> Quit";
+    let footer_text = match state.mode {
+        PickerMode::Search => "<Enter> Paste | <C-y> Copy | <Esc> Normal | <Tab> Tab | <C-c> Quit",
+        PickerMode::Normal => {
+            "<Enter> Paste | <y> Copy | <o/gf> Edit | <gx> Web | <i> Search | <q/Esc> Quit"
+        }
+    };
     let truncated_footer = truncate_str(footer_text, width);
     execute!(
         out,
@@ -657,7 +774,7 @@ pub fn open_in_editor(socket: Option<&str>, path: &str, line: Option<usize>) {
         format!("{editor} {path}")
     };
 
-    if execute_tmux(socket, &["new-window", "-n", "editor", "--", &cmd]).is_err() {
+    if execute_tmux(socket, &["new-window", "-n", "editor", &cmd]).is_err() {
         let _ = std::process::Command::new("xdg-open").arg(path).spawn();
     }
 }

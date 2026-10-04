@@ -116,6 +116,10 @@ enum Commands {
         /// Tmux socket name (-L)
         #[arg(short, long)]
         socket: Option<String>,
+
+        /// Target tmux pane ID
+        #[arg(short, long)]
+        target_pane: Option<String>,
     },
 }
 
@@ -238,13 +242,16 @@ fn main() -> ExitCode {
             launch_popup,
             lines,
             socket,
+            target_pane,
         } => {
             if launch_popup {
                 if let Err(e) = mox::extract::launch_extract_popup(socket.as_deref(), lines) {
                     eprintln!("Error launching extract popup: {e}");
                     return ExitCode::FAILURE;
                 }
-            } else if let Err(e) = mox::extract::run_extract_picker(socket.as_deref(), lines) {
+            } else if let Err(e) =
+                mox::extract::run_extract_picker(socket.as_deref(), lines, target_pane.as_deref())
+            {
                 eprintln!("Error running extract picker: {e}");
                 return ExitCode::FAILURE;
             }
