@@ -12,7 +12,7 @@ use std::time::Duration;
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
-    execute,
+    execute, queue,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{self, Clear, ClearType},
 };
@@ -25,7 +25,7 @@ use crate::ui::picker::PickerState;
 use crate::ui::preview::{Preview, PreviewWorker};
 use crate::ui::render::{
     ListRow, PreviewPanel, draw_divider, render_empty_state, render_hints, render_list_row,
-    render_preview_panel, truncate_str,
+    render_preview_panel, truncate_or_pad,
 };
 use crate::ui::theme::Theme;
 
@@ -172,7 +172,34 @@ pub fn launch_extract_popup(socket: Option<&str>, lines: usize) -> std::io::Resu
         cmd.push_str(&format!(" --socket {}", crate::tmux::shell_quote(sock)));
     }
 
-    let popup_args = ["display-popup", "-E", "-w", "75%", "-h", "65%", &cmd];
+    let theme = crate::ui::Theme::default();
+    let inner = format!(
+        "fg={},bg={}",
+        crate::ui::status::tmux_color(theme.fg),
+        crate::ui::status::tmux_color(theme.bg)
+    );
+    let border = format!(
+        "fg={},bg=default",
+        crate::ui::status::tmux_color(theme.info)
+    );
+
+    let popup_args = [
+        "display-popup",
+        "-E",
+        "-w",
+        "85%",
+        "-h",
+        "85%",
+        "-b",
+        "rounded",
+        "-T",
+        " Mox: extract ",
+        "-s",
+        &inner,
+        "-S",
+        &border,
+        &cmd,
+    ];
 
     execute_tmux(socket, &popup_args)
         .map(|_| ())
@@ -227,7 +254,7 @@ pub fn run_extract_picker(
     let mut state = ExtractState::new(deduped);
     let _guard = TuiGuard::enter()?;
 
-    let mut out = stdout();
+    let mut out = std::io::BufWriter::new(stdout());
     let mut pending_g = false;
     let mut scroll_offset = 0;
     let mut status = None::<String>;
@@ -239,7 +266,23 @@ pub fn run_extract_picker(
     let mut preview_lines = Vec::new();
     let mut pane_cwds = HashMap::<String, Result<PathBuf, String>>::new();
 
+    let _ = execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0));
+
+    let mut needs_redraw = true;
+    let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
+    let mut last_size = (term_w as usize, term_h as usize);
+
     loop {
+        let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
+        let term_w = term_w as usize;
+        let term_h = term_h as usize;
+
+        if (term_w, term_h) != last_size {
+            last_size = (term_w, term_h);
+            needs_redraw = true;
+            let _ = execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0));
+        }
+
         let selected_token_index = state.filtered_indices.get(state.selected_index).copied();
         if selected_token_index != preview_token_index {
             preview_token_index = selected_token_index;
@@ -260,35 +303,45 @@ pub fn run_extract_picker(
                     Err(error) => Preview::Text(format!("Preview unavailable: {error}")),
                 }
             });
+            needs_redraw = true;
         }
         if !preview_requested && let Some(source) = &preview_source {
             preview_requested = worker.request(preview_generation, source);
         }
         if let Some(lines) = worker.result(preview_generation) {
             preview_lines = lines;
+            needs_redraw = true;
         }
 
-        let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
-        let term_w = term_w as usize;
-        let term_h = term_h as usize;
+        if needs_redraw {
+            render_extract_ui(
+                &state,
+                pending_g,
+                scroll_offset,
+                term_w,
+                term_h,
+                status.as_deref(),
+                &preview_lines,
+                &mut out,
+            )?;
+            out.flush()?;
+            needs_redraw = false;
+        }
 
-        render_extract_ui(
-            &state,
-            pending_g,
-            scroll_offset,
-            term_w,
-            term_h,
-            status.as_deref(),
-            &preview_lines,
-            &mut out,
-        )?;
+        let poll_timeout =
+            if !preview_requested || (preview_lines.is_empty() && preview_token_index.is_some()) {
+                Duration::from_millis(30)
+            } else {
+                Duration::from_millis(200)
+            };
 
-        if event::poll(Duration::from_millis(50))?
+        if event::poll(poll_timeout)?
             && let Event::Key(key_event) = event::read()?
         {
             if key_event.kind != KeyEventKind::Press {
                 continue;
             }
+            needs_redraw = true;
 
             // Cancellation always works, including while waiting for gf/gx.
             if key_event.code == KeyCode::Esc
@@ -518,7 +571,7 @@ fn adjust_scroll(state: &mut ExtractState, scroll_offset: &mut usize, term_h: us
 /// Renders the extract picker interface.
 // Keep the render inputs explicit; this is the single Extract view renderer.
 #[allow(clippy::too_many_arguments)]
-fn render_extract_ui(
+pub fn render_extract_ui<W: Write>(
     state: &ExtractState,
     pending_g: bool,
     scroll_offset: usize,
@@ -526,18 +579,11 @@ fn render_extract_ui(
     height: usize,
     status: Option<&str>,
     preview_lines: &[String],
-    out: &mut std::io::Stdout,
+    out: &mut W,
 ) -> std::io::Result<()> {
     let split = width >= 100;
     let list_width = if split { width / 2 } else { width };
     let theme = Theme::nord();
-    execute!(
-        out,
-        cursor::MoveTo(0, 0),
-        Clear(ClearType::All),
-        SetBackgroundColor(theme.bg),
-        SetForegroundColor(theme.fg),
-    )?;
 
     // 1. Header (> query [N matches] [MODE])
     let total_matches = state.filtered_indices.len();
@@ -554,18 +600,30 @@ fn render_extract_ui(
         "> {} [{} matches] {} {}",
         state.query, total_matches, mode_str, g_indicator
     );
-    let header_line = truncate_str(&header_text, list_width);
-    execute!(
+    let header_line = truncate_or_pad(&header_text, list_width);
+    queue!(
         out,
         cursor::MoveTo(0, 0),
+        SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.accent),
+        crossterm::style::SetAttribute(crossterm::style::Attribute::Bold),
         Print(&header_line),
+        crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
         ResetColor,
     )?;
+    if split {
+        queue!(
+            out,
+            cursor::MoveTo(list_width as u16, 0),
+            SetBackgroundColor(theme.bg),
+            Print(" ".repeat(width - list_width)),
+            ResetColor,
+        )?;
+    }
 
     // 2. Category tabs
-    execute!(out, cursor::MoveTo(0, 1))?;
-    execute!(out, SetForegroundColor(theme.fg), Print("Tabs: "),)?;
+    queue!(out, cursor::MoveTo(0, 1), SetBackgroundColor(theme.bg))?;
+    queue!(out, SetForegroundColor(theme.fg), Print("Tabs: "))?;
 
     let mut tabs_width = "Tabs: ".len();
     for cat in CATEGORIES {
@@ -582,7 +640,7 @@ fn render_extract_ui(
         }
         tabs_width += tab_width;
         if is_active {
-            execute!(
+            queue!(
                 out,
                 SetBackgroundColor(theme.accent),
                 SetForegroundColor(theme.bg),
@@ -591,20 +649,38 @@ fn render_extract_ui(
                 SetForegroundColor(theme.fg),
                 Print(" "),
             )?;
+            tabs_width += 1;
         } else {
-            execute!(out, SetForegroundColor(theme.fg), Print(&tab),)?;
+            queue!(out, SetForegroundColor(theme.muted), Print(&tab))?;
         }
     }
+    if tabs_width < list_width {
+        queue!(
+            out,
+            SetBackgroundColor(theme.bg),
+            Print(" ".repeat(list_width - tabs_width))
+        )?;
+    }
+    queue!(out, ResetColor)?;
 
     // 3. Separator line
-    execute!(out, cursor::MoveTo(0, 2))?;
+    queue!(out, cursor::MoveTo(0, 2))?;
     draw_divider(out, list_width, &theme)?;
 
     // 4. List items
     let content_height = height.saturating_sub(4).max(1);
     if state.filtered_indices.is_empty() {
-        execute!(out, cursor::MoveTo(0, 3))?;
+        queue!(out, cursor::MoveTo(0, 3))?;
         render_empty_state(out, "no matching entities", list_width, &theme)?;
+        for r in 1..content_height {
+            queue!(
+                out,
+                cursor::MoveTo(0, (3 + r) as u16),
+                SetBackgroundColor(theme.bg),
+                Print(" ".repeat(list_width)),
+                ResetColor,
+            )?;
+        }
     } else {
         let end_idx = state
             .filtered_indices
@@ -621,7 +697,7 @@ fn render_extract_ui(
             let is_selected = scroll_offset + row_offset == state.selected_index;
             let token = &state.tokens[token_idx];
 
-            execute!(out, cursor::MoveTo(0, row as u16))?;
+            queue!(out, cursor::MoveTo(0, row as u16))?;
 
             let (badge, badge_color) = badge_for_kind(token.kind, &theme);
             let display_text = token.line_number.map_or_else(
@@ -637,6 +713,17 @@ fn render_extract_ui(
             };
 
             render_list_row(out, &list_row, list_width, &theme)?;
+        }
+
+        for r in visible_indices.len()..content_height {
+            let row = 3 + r;
+            queue!(
+                out,
+                cursor::MoveTo(0, row as u16),
+                SetBackgroundColor(theme.bg),
+                Print(" ".repeat(list_width)),
+                ResetColor,
+            )?;
         }
     }
 
@@ -669,10 +756,9 @@ fn render_extract_ui(
             }
         }
     };
-    execute!(out, cursor::MoveTo(0, footer_row))?;
+    queue!(out, cursor::MoveTo(0, footer_row))?;
     render_hints(out, footer_text, width, &theme)?;
 
-    out.flush()?;
     Ok(())
 }
 

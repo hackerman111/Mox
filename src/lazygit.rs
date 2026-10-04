@@ -1,6 +1,7 @@
 //! Open or focus LazyGit in the current tmux session.
 
 use crate::tmux::{execute_tmux, popup};
+use std::io::IsTerminal;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -52,6 +53,23 @@ pub fn open(socket: Option<&str>, cwd: Option<&str>, window: bool) -> Result<(),
 
     if window {
         execute_tmux(socket, &["new-window", "-c", &target_cwd, "lazygit"])?;
+    } else if std::io::stdout().is_terminal() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let err = Command::new("lazygit").current_dir(&target_cwd).exec();
+            return Err(format!("failed to exec lazygit: {err}"));
+        }
+        #[cfg(not(unix))]
+        {
+            let status = Command::new("lazygit")
+                .current_dir(&target_cwd)
+                .status()
+                .map_err(|e| format!("failed to run lazygit: {e}"))?;
+            if !status.success() {
+                return Err("lazygit exited with error".to_string());
+            }
+        }
     } else {
         popup(socket, "LazyGit", Some(&target_cwd), "lazygit")?;
     }

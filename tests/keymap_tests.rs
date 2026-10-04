@@ -317,3 +317,116 @@ fn test_popup_titles_capitalized_mox() {
         }
     }
 }
+
+#[test]
+fn test_modal_space_o_f_bindings_trigger_features() {
+    use mox::actions::FeatureAction;
+
+    let root = build_default_keymap();
+
+    let space_child = root.find_child("Space").expect("Space must be mapped");
+    assert_eq!(
+        space_child.action,
+        Some(KeyAction::Feature(FeatureAction::Palette))
+    );
+
+    let o_child = root.find_child("o").expect("o must be mapped");
+    assert_eq!(
+        o_child.action,
+        Some(KeyAction::Feature(FeatureAction::Projects))
+    );
+
+    let f_child = root.find_child("f").expect("f must be mapped");
+    assert_eq!(
+        f_child.action,
+        Some(KeyAction::Feature(FeatureAction::Files))
+    );
+
+    let tab_child = root.find_child("Tab").expect("Tab must be mapped");
+    assert_eq!(
+        tab_child.action,
+        Some(KeyAction::Tmux("last-window".into()))
+    );
+
+    let qmark_child = root.find_child("?").expect("? must be mapped");
+    assert_eq!(qmark_child.action, Some(KeyAction::WhichKey));
+}
+
+#[test]
+fn test_init_script_modal_bindings_and_no_prefix_hijack() {
+    use mox::tmux::generate_init_script;
+
+    let root = build_default_keymap();
+    let script = generate_init_script(&root, "M-m", "mox", None);
+
+    // Modal table 'mox' must bind Space, o, f to their respective actions
+    let mox_space = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox Space"))
+        .expect("mox Space binding missing");
+    assert!(mox_space.contains("action palette"));
+
+    let mox_o = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox o"))
+        .expect("mox o binding missing");
+    assert!(mox_o.contains("action projects"));
+
+    let mox_f = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox f"))
+        .expect("mox f binding missing");
+    assert!(mox_f.contains("action files"));
+
+    // Prefix table must NOT bind Space, o, f, or N
+    assert!(
+        !script
+            .iter()
+            .any(|l| l.contains("bind-key -T prefix Space")),
+        "prefix Space must not be bound"
+    );
+    assert!(
+        !script.iter().any(|l| l.contains("bind-key -T prefix o")),
+        "prefix o must not be bound"
+    );
+    assert!(
+        !script.iter().any(|l| l.contains("bind-key -T prefix f ")),
+        "prefix f must not be bound"
+    );
+    assert!(
+        !script.iter().any(|l| l.contains("bind-key -T prefix N ")),
+        "prefix N must not be bound"
+    );
+}
+
+#[test]
+fn test_modal_n_and_g_lazygit_bindings_and_display_merge() {
+    use mox::actions::FeatureAction;
+    use mox::ui::view::build_display_items;
+
+    let root = build_default_keymap();
+
+    let n_child = root.find_child("N").expect("N must be mapped");
+    assert_eq!(
+        n_child.action,
+        Some(KeyAction::Feature(FeatureAction::LazyGit))
+    );
+
+    let g_child = root.find_child("G").expect("G must be mapped");
+    assert_eq!(
+        g_child.action,
+        Some(KeyAction::Feature(FeatureAction::LazyGit))
+    );
+
+    let display_items = build_display_items(&root);
+    assert!(
+        display_items
+            .iter()
+            .any(|(k, l)| k == "N/G" && l == "LazyGit"),
+        "display items must contain merged 'N/G' -> 'LazyGit': {display_items:?}"
+    );
+    assert!(
+        !display_items.iter().any(|(k, _)| k == "G"),
+        "G must be merged into N/G rather than appearing standalone: {display_items:?}"
+    );
+}

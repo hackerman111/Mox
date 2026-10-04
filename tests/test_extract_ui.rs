@@ -204,3 +204,21 @@ fn test_extract_state_picker_mode() {
     state.mode = PickerMode::Search;
     assert_eq!(state.mode, PickerMode::Search);
 }
+
+#[test]
+fn test_render_extract_ui_does_not_clear_entire_screen() {
+    use mox::extract::ui::render_extract_ui;
+
+    let tokens = vec![token(EntityKind::Path, "src/main.rs")];
+    let state = ExtractState::new(tokens);
+    let mut buf = Vec::new();
+    assert!(render_extract_ui(&state, false, 0, 80, 24, None, &[], &mut buf).is_ok());
+    let output = String::from_utf8_lossy(&buf);
+
+    // Escape sequence \x1b[2J is Clear(All), which causes screen flickering.
+    assert!(
+        !output.contains("\x1b[2J"),
+        "render_extract_ui must overwrite in place without full screen clears"
+    );
+    assert!(output.contains("src/main.rs"));
+}

@@ -7,7 +7,8 @@ use super::{
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    execute,
+    execute, queue,
+    style::Print,
     terminal::{self, Clear, ClearType},
 };
 use std::io::{Write, stdout};
@@ -111,15 +112,28 @@ pub fn run_picker(
             .map(|(i, item)| (i, item.label.as_str())),
     );
     let theme = Theme::default();
-    let mut out = stdout();
+    let mut out = std::io::BufWriter::new(stdout());
     let worker = PreviewWorker::new(socket);
     let mut selected_id = None;
     let mut generation = 0;
     let mut sent = false;
     let mut lines = Vec::new();
+
+    let _ = execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0));
+
+    let mut needs_redraw = true;
+    let mut last_size = (0usize, 0usize);
+
     loop {
         let (width, height) = terminal::size().map_err(|e| e.to_string())?;
         let (width, height) = (width as usize, height as usize);
+
+        if (width, height) != last_size {
+            last_size = (width, height);
+            needs_redraw = true;
+            let _ = execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0));
+        }
+
         let rows = height.saturating_sub(4);
         state.viewport(state.indices.len(), rows);
         let original = state.indices.get(state.selected).copied();
@@ -128,75 +142,92 @@ pub fn run_picker(
             generation += 1;
             sent = false;
             lines.clear();
+            needs_redraw = true;
         }
         if !sent && let Some(index) = original {
             sent = worker.request(generation, &items[index].preview);
         }
         if let Some(result) = worker.result(generation) {
             lines = result;
+            needs_redraw = true;
         }
-        let list_width = if width >= 70 { width / 2 } else { width };
-        execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0)).map_err(|e| e.to_string())?;
-        render_prompt(
-            &mut out,
-            title,
-            &state.query,
-            Some(&format!("{} results", state.indices.len())),
-            width,
-            &theme,
-        )
-        .map_err(|e| e.to_string())?;
-        for (row, &index) in state
-            .indices
-            .iter()
-            .enumerate()
-            .skip(state.offset)
-            .take(rows)
-        {
-            execute!(out, cursor::MoveTo(0, (row - state.offset + 2) as u16))
+
+        if needs_redraw {
+            let list_width = if width >= 70 { width / 2 } else { width };
+            queue!(out, cursor::MoveTo(0, 0)).map_err(|e| e.to_string())?;
+            render_prompt(
+                &mut out,
+                title,
+                &state.query,
+                Some(&format!("{} results", state.indices.len())),
+                width,
+                &theme,
+            )
+            .map_err(|e| e.to_string())?;
+
+            for r in 0..rows {
+                let row_idx = state.offset + r;
+                queue!(out, cursor::MoveTo(0, (r + 2) as u16)).map_err(|e| e.to_string())?;
+                if row_idx < state.indices.len() {
+                    let index = state.indices[row_idx];
+                    render_list_row(
+                        &mut out,
+                        &ListRow {
+                            prefix: "",
+                            badge: None,
+                            text: &items[index].label,
+                            is_selected: row_idx == state.selected,
+                        },
+                        list_width,
+                        &theme,
+                    )
+                    .map_err(|e| e.to_string())?;
+                } else {
+                    queue!(out, Print(" ".repeat(list_width))).map_err(|e| e.to_string())?;
+                }
+            }
+
+            if list_width < width {
+                render_preview_panel(
+                    &mut out,
+                    &PreviewPanel {
+                        title: "Preview",
+                        lines: &lines,
+                        x: list_width,
+                        y: 1,
+                        width: width - list_width,
+                        height: height.saturating_sub(2),
+                    },
+                    &theme,
+                )
                 .map_err(|e| e.to_string())?;
-            render_list_row(
+            }
+
+            queue!(out, cursor::MoveTo(0, height.saturating_sub(1) as u16))
+                .map_err(|e| e.to_string())?;
+            render_hints(
                 &mut out,
-                &ListRow {
-                    prefix: "",
-                    badge: None,
-                    text: &items[index].label,
-                    is_selected: row == state.selected,
-                },
-                list_width,
+                "type: filter · ↑↓/C-j/k: select · Enter: accept · Esc: cancel",
+                width,
                 &theme,
             )
             .map_err(|e| e.to_string())?;
+
+            out.flush().map_err(|e| e.to_string())?;
+            needs_redraw = false;
         }
-        if list_width < width {
-            render_preview_panel(
-                &mut out,
-                &PreviewPanel {
-                    title: "Preview",
-                    lines: &lines,
-                    x: list_width,
-                    y: 1,
-                    width: width - list_width,
-                    height: height.saturating_sub(2),
-                },
-                &theme,
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        execute!(out, cursor::MoveTo(0, height.saturating_sub(1) as u16))
-            .map_err(|e| e.to_string())?;
-        render_hints(
-            &mut out,
-            "type: filter · ↑↓/C-j/k: select · Enter: accept · Esc: cancel",
-            width,
-            &theme,
-        )
-        .map_err(|e| e.to_string())?;
-        out.flush().map_err(|e| e.to_string())?;
-        if !event::poll(Duration::from_millis(50)).map_err(|e| e.to_string())? {
+
+        let poll_timeout = if !sent || (lines.is_empty() && original.is_some()) {
+            Duration::from_millis(30)
+        } else {
+            Duration::from_millis(200)
+        };
+
+        if !event::poll(poll_timeout).map_err(|e| e.to_string())? {
             continue;
         }
         if let Event::Key(key) = event::read().map_err(|e| e.to_string())? {
+            needs_redraw = true;
             match state.input(key, state.indices.len(), true) {
                 Input::Changed => state.filter(
                     items

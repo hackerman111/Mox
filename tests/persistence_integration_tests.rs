@@ -229,7 +229,7 @@ fn add_session_topology(server: &TmuxServer, dirs: &[PathBuf]) {
         "new-window",
         "-d",
         "-t",
-        "alpha",
+        "alpha:",
         "-n",
         "alpha-detail",
         "-c",

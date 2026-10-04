@@ -350,8 +350,27 @@ pub fn build_default_keymap() -> KeyNode {
             "next window",
             KeyAction::Tmux("select-window -t :+".into()),
         ),
-        KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
+        KeyNode::new_action(
+            "o",
+            "projects",
+            KeyAction::Feature(crate::actions::FeatureAction::Projects),
+        ),
         KeyNode::new_action("Tab", "last window", KeyAction::Tmux("last-window".into())),
+        KeyNode::new_action(
+            "f",
+            "files",
+            KeyAction::Feature(crate::actions::FeatureAction::Files),
+        ),
+        KeyNode::new_action(
+            "N",
+            "LazyGit",
+            KeyAction::Feature(crate::actions::FeatureAction::LazyGit),
+        ),
+        KeyNode::new_action(
+            "G",
+            "LazyGit",
+            KeyAction::Feature(crate::actions::FeatureAction::LazyGit),
+        ),
         // Visual Navigation: Flash Jump & Copy Mode
         KeyNode::new_action(
             "s",
@@ -423,7 +442,11 @@ pub fn build_default_keymap() -> KeyNode {
             KeyAction::Tmux("command-prompt".into()),
         ),
         KeyNode::new_action("?", "which-key help", KeyAction::WhichKey),
-        KeyNode::new_action("Space", "which-key help", KeyAction::WhichKey),
+        KeyNode::new_action(
+            "Space",
+            "palette",
+            KeyAction::Feature(crate::actions::FeatureAction::Palette),
+        ),
         // Exits to Insert Mode
         KeyNode::new_action("i", "insert mode", KeyAction::ExitModal),
         KeyNode::new_action("Escape", "insert mode", KeyAction::ExitModal),

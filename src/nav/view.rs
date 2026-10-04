@@ -8,24 +8,23 @@ use crate::ui::render::{
 };
 use crate::ui::theme::Theme;
 use crossterm::{
-    cursor, execute,
+    cursor, queue,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{Clear, ClearType},
 };
 use std::io::Write;
 
-pub fn render_navigator(
+pub fn render_navigator<W: Write>(
     app: &NavigatorApp,
     items: &[TreeItem],
     width: usize,
     height: usize,
-    out: &mut std::io::Stdout,
+    out: &mut W,
 ) -> Result<(), String> {
     let theme = Theme::nord();
-    let _ = execute!(
+    let _ = queue!(
         out,
         cursor::MoveTo(0, 0),
-        Clear(ClearType::All),
         SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.fg)
     );
@@ -35,11 +34,11 @@ pub fn render_navigator(
     } else {
         width
     };
-    let preview_width = width.saturating_sub(tree_width).saturating_sub(1);
+    let preview_width = width.saturating_sub(tree_width);
     let content_height = height.saturating_sub(4);
 
     // 1. Search Bar
-    let _ = execute!(out, cursor::MoveTo(0, 0));
+    let _ = queue!(out, cursor::MoveTo(0, 0));
     let mode_badge = if app.in_search_mode {
         "[SEARCH]"
     } else {
@@ -48,14 +47,14 @@ pub fn render_navigator(
     let _ = render_prompt(out, mode_badge, &app.picker.query, None, tree_width, &theme);
 
     // Divider line
-    let _ = execute!(out, cursor::MoveTo(0, 1));
+    let _ = queue!(out, cursor::MoveTo(0, 1));
     let _ = draw_divider(out, tree_width, &theme);
     // Tree rows
     for row in 0..content_height {
         let y = (row + 2) as u16;
         let item_idx = app.picker.offset + row;
 
-        let _ = execute!(out, cursor::MoveTo(0, y));
+        let _ = queue!(out, cursor::MoveTo(0, y));
 
         if item_idx < items.len() {
             let item = &items[item_idx];
@@ -71,7 +70,7 @@ pub fn render_navigator(
             };
             let _ = render_tree_row(out, &row, tree_width, &theme);
         } else {
-            let _ = execute!(out, Print(" ".repeat(tree_width)));
+            let _ = queue!(out, Print(" ".repeat(tree_width)));
         }
     }
 
@@ -92,27 +91,29 @@ pub fn render_navigator(
 
     // 3. Footer / Help Bar
     let footer_y = (height.saturating_sub(2)) as u16;
-    let _ = execute!(out, cursor::MoveTo(0, footer_y));
+    let _ = queue!(out, cursor::MoveTo(0, footer_y));
     let _ = draw_divider(out, width, &theme);
 
     let status_y = (height.saturating_sub(1)) as u16;
-    let _ = execute!(out, cursor::MoveTo(0, status_y));
+    let _ = queue!(out, cursor::MoveTo(0, status_y));
 
     if let Some((prompt, _)) = &app.confirm_action {
         let _ = render_confirm(out, prompt, &theme);
+        let _ = queue!(out, Clear(ClearType::UntilNewLine));
     } else if let Some((target_type, _)) = &app.rename_target {
         let prompt_str = format!(" Rename {target_type}: {}_ ", app.rename_buffer);
-        let _ = execute!(
+        let _ = queue!(
             out,
             SetBackgroundColor(theme.warning),
             SetForegroundColor(theme.bg),
-            Print(&prompt_str),
+            Print(truncate_or_pad(&prompt_str, width)),
             ResetColor
         );
     } else {
         let help_text =
             "Enter:Switch │ dd:Kill │ r:Rename │ Tab:Fold │ ?:Preview │ /:Search │ Esc:Exit";
         let _ = render_hints(out, help_text, width, &theme);
+        let _ = queue!(out, Clear(ClearType::UntilNewLine));
     }
 
     out.flush().map_err(|e| e.to_string())?;

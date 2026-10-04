@@ -282,3 +282,54 @@ fn padding_and_truncation_use_terminal_cell_width() {
     assert_eq!(display_width(&truncate_or_pad("e\u{301}", 4)), 4);
     assert_eq!(truncate_str("界", 1), "");
 }
+
+#[test]
+fn test_tmux_indicator_prefix_has_priority_over_agent() {
+    let theme = Theme::nord();
+    let indicator = mox::ui::status::tmux_indicator(&theme);
+    assert!(indicator.contains("PREFIX"));
+    assert!(indicator.contains("AGENT"));
+
+    // Prefix condition must be evaluated before Agent condition (outer wrapper)
+    // so in an agent tab, entering prefix mode displays PREFIX instead of AGENT.
+    let prefix_cond_pos = indicator
+        .find("#{||:#{client_prefix},#{m:mox*,#{client_key_table}}}")
+        .expect("prefix condition");
+    let agent_cond_pos = indicator
+        .find("#{==:#{@mox_is_agent},1}")
+        .expect("agent condition");
+    assert!(
+        prefix_cond_pos < agent_cond_pos,
+        "Prefix condition must appear before Agent condition in status format"
+    );
+}
+
+#[test]
+fn test_render_navigator_does_not_clear_entire_screen() {
+    use mox::nav::model::{SessionInfo, visible_tree};
+    use mox::nav::state::NavigatorApp;
+    use mox::nav::view::render_navigator;
+
+    let sessions = vec![SessionInfo {
+        id: "$0".into(),
+        name: "test-session".into(),
+        active: true,
+        windows: vec![],
+        collapsed: false,
+    }];
+    let app = NavigatorApp::new(sessions);
+    let items = visible_tree(&app.sessions, "");
+    let mut buf = Vec::new();
+    assert!(render_navigator(&app, &items, 80, 24, &mut buf).is_ok());
+    let output = String::from_utf8_lossy(&buf);
+
+    // Escape sequence \x1b[2J is Clear(All), which causes screen flickering.
+    assert!(
+        !output.contains("\x1b[2J"),
+        "render_navigator must overwrite lines in-place without full screen clears"
+    );
+    assert!(
+        output.contains("test-session"),
+        "should render session name"
+    );
+}

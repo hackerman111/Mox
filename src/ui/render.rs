@@ -5,7 +5,7 @@
 
 use crate::ui::theme::Theme;
 use crossterm::{
-    cursor, execute,
+    cursor, queue,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
 };
 use std::io::Write;
@@ -99,7 +99,7 @@ pub fn render_list_row<W: Write>(
         theme.muted
     };
 
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(bg),
         SetForegroundColor(sel_color),
@@ -115,9 +115,9 @@ pub fn render_list_row<W: Write>(
         let b_trunc = truncate_str(badge_text, max_badge);
         let b_len = display_width(&b_trunc);
         used_cols += b_len;
-        execute!(out, SetForegroundColor(badge_color), Print(&b_trunc),)?;
+        queue!(out, SetForegroundColor(badge_color), Print(&b_trunc),)?;
         if used_cols < width {
-            execute!(out, Print(" "))?;
+            queue!(out, Print(" "))?;
             used_cols += 1;
         }
     }
@@ -128,14 +128,14 @@ pub fn render_list_row<W: Write>(
         let text_len = display_width(&text_trunc);
         used_cols += text_len;
 
-        execute!(out, SetForegroundColor(fg), Print(&text_trunc),)?;
+        queue!(out, SetForegroundColor(fg), Print(&text_trunc),)?;
     }
 
     if used_cols < width {
-        execute!(out, Print(" ".repeat(width - used_cols)))?;
+        queue!(out, Print(" ".repeat(width - used_cols)))?;
     }
 
-    execute!(out, ResetColor)
+    queue!(out, ResetColor)
 }
 
 /// A node line in a hierarchical tree view (e.g. Navigator sessions, windows, panes).
@@ -186,7 +186,7 @@ pub fn render_tree_row<W: Write>(
 
     let line = truncate_or_pad(&line_buf, width);
 
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(bg),
         SetForegroundColor(if row.is_selected {
@@ -204,7 +204,7 @@ pub fn draw_divider<W: Write>(out: &mut W, width: usize, theme: &Theme) -> std::
     if width == 0 {
         return Ok(());
     }
-    execute!(
+    queue!(
         out,
         SetForegroundColor(theme.border),
         Print("─".repeat(width)),
@@ -228,7 +228,7 @@ pub fn render_prompt<W: Write>(
     let text = format!("{mode_badge} / {query}{info_str}");
     let line = truncate_or_pad(&text, width);
 
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.accent),
@@ -241,7 +241,7 @@ pub fn render_prompt<W: Write>(
 pub fn render_confirm<W: Write>(out: &mut W, prompt: &str, theme: &Theme) -> std::io::Result<()> {
     let msg = format!(" [CONFIRM] {prompt} ");
     let msg = truncate_str(&msg, msg.chars().count());
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.error),
         SetForegroundColor(theme.bg),
@@ -266,7 +266,7 @@ pub fn render_toast<W: Write>(
     let line = truncate_or_pad(&full, width);
     let color = if is_error { theme.error } else { theme.success };
 
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.bg),
         SetForegroundColor(color),
@@ -286,7 +286,7 @@ pub fn render_hints<W: Write>(
         return Ok(());
     }
     let line = truncate_or_pad(&format!(" {hints}"), width);
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.info),
@@ -306,7 +306,7 @@ pub fn render_empty_state<W: Write>(
         return Ok(());
     }
     let line = truncate_or_pad(&format!("  ({message})"), width);
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.muted),
@@ -336,10 +336,10 @@ pub fn render_preview_panel<W: Write>(
     }
 
     // Header row
-    execute!(out, cursor::MoveTo(panel.x as u16, panel.y as u16))?;
+    queue!(out, cursor::MoveTo(panel.x as u16, panel.y as u16))?;
     let header_title = format!("│ {}", panel.title);
     let header_line = truncate_or_pad(&header_title, panel.width);
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.info),
@@ -349,9 +349,9 @@ pub fn render_preview_panel<W: Write>(
 
     // Divider row
     if panel.height > 1 {
-        execute!(out, cursor::MoveTo(panel.x as u16, (panel.y + 1) as u16))?;
+        queue!(out, cursor::MoveTo(panel.x as u16, (panel.y + 1) as u16))?;
         let div = format!("┼{}", "─".repeat(panel.width.saturating_sub(1)));
-        execute!(
+        queue!(
             out,
             SetBackgroundColor(theme.bg),
             SetForegroundColor(theme.border),
@@ -364,7 +364,7 @@ pub fn render_preview_panel<W: Write>(
     let content_rows = panel.height.saturating_sub(2);
     for r in 0..content_rows {
         let y = panel.y + 2 + r;
-        execute!(out, cursor::MoveTo(panel.x as u16, y as u16))?;
+        queue!(out, cursor::MoveTo(panel.x as u16, y as u16))?;
 
         let line_content = if r < panel.lines.len() {
             truncate_or_pad(&panel.lines[r], panel.width.saturating_sub(1))
@@ -372,7 +372,7 @@ pub fn render_preview_panel<W: Write>(
             " ".repeat(panel.width.saturating_sub(1))
         };
 
-        execute!(
+        queue!(
             out,
             SetBackgroundColor(theme.bg),
             SetForegroundColor(theme.border),

@@ -65,7 +65,8 @@ pub fn generate_init_script(
     lines.push("# Modal status indicator".into());
     lines.push("set -g status-left-length 250".into());
 
-    let raw_status_left = current_status_left.unwrap_or("#[fg=black,bg=blue,bold] #S #[default]");
+    let raw_status_left =
+        current_status_left.unwrap_or("#[fg=#2e3440,bg=#88c0d0,bold] #S #[default]");
     let base_status_left = clean_status_left(raw_status_left);
 
     let theme = crate::ui::Theme::default();
@@ -106,12 +107,8 @@ pub fn generate_init_script(
     ));
     lines.extend(crate::navigation::bindings(bin_path));
     for (key, action) in [
-        ("Space", "palette"),
-        ("o", "projects"),
-        ("f", "files"),
         ("C-f", "git-files"),
         ("/", "search"),
-        ("N", "lazy-git"),
         ("C-s", "save"),
         ("C-r", "restore"),
     ] {

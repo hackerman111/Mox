@@ -150,7 +150,18 @@ pub fn popup(
     cwd: Option<&str>,
     command: &str,
 ) -> Result<(), String> {
-    let mut args = vec!["display-popup", "-E", "-w", "85%", "-h", "85%", "-T", title];
+    let mut args = vec![
+        "display-popup",
+        "-E",
+        "-w",
+        "85%",
+        "-h",
+        "85%",
+        "-b",
+        "rounded",
+        "-T",
+        title,
+    ];
     if let Some(cwd) = cwd {
         args.extend(["-d", cwd]);
     }

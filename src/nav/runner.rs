@@ -8,7 +8,8 @@ use crate::tui::RawModeGuard;
 use crate::ui::picker::Input;
 use crate::ui::preview::{Preview, PreviewWorker};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use crossterm::terminal;
+use crossterm::terminal::{self, Clear, ClearType};
+use crossterm::{cursor, execute};
 use std::io::stdout;
 use std::time::Duration;
 
@@ -20,11 +21,23 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
     let mut preview_generation = 0u64;
     let mut requested_pane = String::new();
     let mut preview_sent = false;
-    let mut out = stdout();
+    let mut out = std::io::BufWriter::new(stdout());
+
+    let _ = execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0));
+
+    let mut needs_redraw = true;
+    let mut last_size = (0usize, 0usize);
 
     loop {
         let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
         let (term_w, term_h) = (term_w as usize, term_h as usize);
+
+        if (term_w, term_h) != last_size {
+            last_size = (term_w, term_h);
+            needs_redraw = true;
+            let _ = execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0));
+        }
+
         let items = visible_tree(&app.sessions, &app.picker.query);
         app.picker.viewport(items.len(), term_h.saturating_sub(4));
 
@@ -38,9 +51,13 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
             preview_generation = preview_generation.wrapping_add(1);
             preview_sent = false;
             app.cached_preview_lines.clear();
+            needs_redraw = true;
         }
         if requested_pane.is_empty() {
-            app.cached_preview_lines.clear();
+            if !app.cached_preview_lines.is_empty() {
+                app.cached_preview_lines.clear();
+                needs_redraw = true;
+            }
             preview_sent = true;
         } else if app.show_preview && !preview_sent {
             preview_sent =
@@ -48,10 +65,24 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
         }
         if let Some(lines) = preview_worker.result(preview_generation) {
             app.cached_preview_lines = lines;
+            needs_redraw = true;
         }
 
-        render_navigator(&app, &items, term_w, term_h, &mut out)?;
-        if !event::poll(Duration::from_millis(50)).map_err(|error| error.to_string())? {
+        if needs_redraw {
+            render_navigator(&app, &items, term_w, term_h, &mut out)?;
+            needs_redraw = false;
+        }
+
+        let poll_timeout = if app.show_preview
+            && (!preview_sent
+                || (app.cached_preview_lines.is_empty() && !requested_pane.is_empty()))
+        {
+            Duration::from_millis(30)
+        } else {
+            Duration::from_millis(200)
+        };
+
+        if !event::poll(poll_timeout).map_err(|error| error.to_string())? {
             continue;
         }
         let Event::Key(key_event) = event::read().map_err(|error| error.to_string())? else {
@@ -60,6 +91,8 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
         if key_event.kind != KeyEventKind::Press {
             continue;
         }
+
+        needs_redraw = true;
 
         if key_event.modifiers.contains(KeyModifiers::ALT) && key_event.code == KeyCode::Char('m') {
             break;

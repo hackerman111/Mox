@@ -52,11 +52,35 @@ pub fn build_display_items(node: &KeyNode) -> Vec<(String, String)> {
     if keys.contains("t") && keys.contains("T") {
         skip_keys.insert("T");
     }
-    if keys.contains("o") && keys.contains("Tab") {
+
+    let o_child = node.children.iter().find(|c| c.key == "o");
+    let tab_child = node.children.iter().find(|c| c.key == "Tab");
+    let merge_o_tab = match (o_child, tab_child) {
+        (Some(o), Some(t)) => o.action == t.action && o.label == t.label,
+        _ => false,
+    };
+    if merge_o_tab {
         skip_keys.insert("Tab");
     }
-    if keys.contains("?") && keys.contains("Space") {
+
+    let qmark_child = node.children.iter().find(|c| c.key == "?");
+    let space_child = node.children.iter().find(|c| c.key == "Space");
+    let merge_qmark_space = match (qmark_child, space_child) {
+        (Some(q), Some(s)) => q.action == s.action && q.label == s.label,
+        _ => false,
+    };
+    if merge_qmark_space {
         skip_keys.insert("Space");
+    }
+
+    let n_child = node.children.iter().find(|c| c.key == "N");
+    let g_child = node.children.iter().find(|c| c.key == "G");
+    let merge_n_g = match (n_child, g_child) {
+        (Some(n), Some(g)) => n.action == g.action && n.label == g.label,
+        _ => false,
+    };
+    if merge_n_g {
+        skip_keys.insert("G");
     }
 
     for child in &node.children {
@@ -70,9 +94,11 @@ pub fn build_display_items(node: &KeyNode) -> Vec<(String, String)> {
             "X/D".to_string()
         } else if child.key == "t" && keys.contains("T") {
             "t/T".to_string()
-        } else if child.key == "o" && keys.contains("Tab") {
+        } else if child.key == "o" && merge_o_tab {
             "o/Tab".to_string()
-        } else if child.key == "?" && keys.contains("Space") {
+        } else if child.key == "N" && merge_n_g {
+            "N/G".to_string()
+        } else if child.key == "?" && merge_qmark_space {
             "?/␣".to_string()
         } else if child.key == "Space" {
             "␣".to_string()
@@ -103,8 +129,8 @@ pub fn render_menu(
     status_msg: Option<&str>,
 ) -> Result<(), String> {
     let theme = Theme::nord();
-    let mut out = stdout();
-    execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0))
+    let mut out = std::io::BufWriter::new(stdout());
+    crossterm::queue!(out, Clear(ClearType::All), cursor::MoveTo(0, 0))
         .map_err(|e| format!("Render error: {e}"))?;
 
     let (cols, _rows) = terminal::size().unwrap_or((82, 15));
@@ -129,11 +155,13 @@ pub fn render_menu(
         _ => Mode::Normal,
     };
 
-    execute!(out, Print("  ")).map_err(|e| e.to_string())?;
+    crossterm::queue!(out, Print("  ")).map_err(|e| e.to_string())?;
     render_status_badge(&mut out, mode, node.sticky, &theme).map_err(|e| e.to_string())?;
-    execute!(
+    crossterm::queue!(
         out,
+        SetForegroundColor(theme.muted),
         Print(if node.sticky { "" } else { "  which-key" }),
+        ResetColor,
         Print("\r\n\r\n")
     )
     .map_err(|e| e.to_string())?;
@@ -151,30 +179,31 @@ pub fn render_menu(
 
     for chunk in display_items.chunks(num_columns) {
         for (key, label) in chunk {
-            let max_label_len = col_w.saturating_sub(9).max(8);
-            execute!(
+            let max_label_len = col_w.saturating_sub(10).max(8);
+            crossterm::queue!(
                 out,
                 Print("  "),
                 SetForegroundColor(theme.warning),
                 SetAttribute(Attribute::Bold),
                 Print(super::render::truncate_or_pad(key, 5)),
                 SetAttribute(Attribute::Reset),
+                SetForegroundColor(theme.muted),
+                Print(" · "),
                 SetForegroundColor(theme.fg),
-                Print("  "),
                 Print(super::render::truncate_or_pad(label, max_label_len)),
                 ResetColor
             )
             .map_err(|e| e.to_string())?;
         }
-        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     }
 
     if let Some(msg) = status_msg {
-        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
         render_toast(&mut out, msg, false, cols, &theme).map_err(|e| e.to_string())?;
-        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     } else {
-        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
         render_hints(
             &mut out,
             "[key] run    [q/Esc] back    [i] insert",
@@ -182,7 +211,7 @@ pub fn render_menu(
             &theme,
         )
         .map_err(|e| e.to_string())?;
-        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     }
 
     out.flush().map_err(|e| e.to_string())?;

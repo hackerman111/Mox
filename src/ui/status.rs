@@ -2,8 +2,10 @@
 
 use crate::ui::theme::Theme;
 use crossterm::{
-    execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    queue,
+    style::{
+        Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
+    },
 };
 use std::io::Write;
 
@@ -60,27 +62,32 @@ pub fn tmux_color(color: Color) -> String {
     }
 }
 
-/// Priority is client suspension, selection/copy, resize, sync, agent, prefix, normal.
+/// Priority is client suspension, selection/copy, resize, sync, prefix, agent, normal.
 pub fn tmux_indicator(theme: &Theme) -> String {
     let badge = |mode: Mode| {
+        let (icon, label) = match mode {
+            Mode::Normal => ("●", "NORMAL"),
+            Mode::Prefix => ("◆", "PREFIX"),
+            Mode::Visual => ("◈", "VISUAL"),
+            Mode::Agent => ("▲", "AGENT"),
+            Mode::Copy => ("⎘", "COPY"),
+            Mode::Resize => ("↕", "RESIZE"),
+            Mode::Sync => ("⇄", "SYNC"),
+            Mode::Suspend => ("⏸", "SUSPEND"),
+        };
         format!(
-            "#[fg={}]#[bg={}]#[bold] {} #[default] ",
+            "#[fg={}]#[bg={}]#[bold] {icon} {label} #[default] ",
             tmux_color(theme.bg),
             tmux_color(mode.color(theme)),
-            if mode == Mode::Visual {
-                "◈ VISUAL"
-            } else {
-                mode.label()
-            }
         )
     };
     let mut value = badge(Mode::Normal);
     for (condition, mode) in [
+        ("#{==:#{@mox_is_agent},1}", Mode::Agent),
         (
             "#{||:#{client_prefix},#{m:mox*,#{client_key_table}}}",
             Mode::Prefix,
         ),
-        ("#{==:#{@mox_is_agent},1}", Mode::Agent),
         ("#{pane_synchronized}", Mode::Sync),
         ("#{m:mox*r,#{client_key_table}}", Mode::Resize),
         ("#{pane_in_mode}", Mode::Copy),
@@ -100,19 +107,30 @@ pub fn render_status_badge<W: Write>(
     theme: &Theme,
 ) -> std::io::Result<()> {
     let bg = mode.color(theme);
-    let label = mode.label();
-    execute!(
+    let (icon, label) = match mode {
+        Mode::Normal => ("●", "NORMAL"),
+        Mode::Prefix => ("◆", "PREFIX"),
+        Mode::Visual => ("◈", "VISUAL"),
+        Mode::Agent => ("▲", "AGENT"),
+        Mode::Copy => ("⎘", "COPY"),
+        Mode::Resize => ("↕", "RESIZE"),
+        Mode::Sync => ("⇄", "SYNC"),
+        Mode::Suspend => ("⏸", "SUSPEND"),
+    };
+    queue!(
         out,
         SetBackgroundColor(bg),
         SetForegroundColor(theme.bg),
-        Print(format!(" {label} ")),
+        SetAttribute(Attribute::Bold),
+        Print(format!(" {icon} {label} ")),
+        SetAttribute(Attribute::Reset),
         ResetColor,
     )?;
 
     if sticky {
-        execute!(
+        queue!(
             out,
-            SetForegroundColor(theme.muted),
+            SetForegroundColor(theme.warning),
             Print(" [STICKY]"),
             ResetColor,
         )?;
@@ -132,7 +150,7 @@ pub fn render_status_bar<W: Write>(
     let right_len = super::render::display_width(right);
     let padding = width.saturating_sub(left_len + right_len);
 
-    execute!(
+    queue!(
         out,
         SetBackgroundColor(theme.bg),
         SetForegroundColor(theme.fg),
