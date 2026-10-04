@@ -242,18 +242,18 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action(
             "f",
             "quick file open",
-            KeyAction::Tmux(
-                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-open --filter path\""
-                    .into(),
-            ),
+            KeyAction::Flash(crate::flash::FlashConfig::new_quick_open(
+                Some(crate::extract::EntityKind::Path),
+                false,
+            )),
         ),
         KeyNode::new_action(
             "x",
             "quick URL open",
-            KeyAction::Tmux(
-                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-open --filter url\""
-                    .into(),
-            ),
+            KeyAction::Flash(crate::flash::FlashConfig::new_quick_open(
+                Some(crate::extract::EntityKind::Url),
+                false,
+            )),
         ),
         KeyNode::new_action("w", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
@@ -285,30 +285,22 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action(
             "f",
             "quick entity yank",
-            KeyAction::Tmux(
-                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-yank\"".into(),
-            ),
+            KeyAction::Flash(crate::flash::FlashConfig::new_quick_yank(None, false)),
         ),
         KeyNode::new_action(
             "h",
             "quick hash yank",
-            KeyAction::Tmux(
-                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-yank --filter hash\""
-                    .into(),
-            ),
+            KeyAction::Flash(crate::flash::FlashConfig::new_quick_yank(
+                Some(crate::extract::EntityKind::Hash),
+                false,
+            )),
         ),
         KeyNode::new_action(
             "s",
             "remote flash yank",
-            KeyAction::Tmux(
-                "run-shell \"{{bin_path}} flash --launch-popup --mode remote-yank\"".into(),
-            ),
+            KeyAction::Flash(crate::flash::FlashConfig::new_remote_yank(false)),
         ),
-        KeyNode::new_action(
-            "e",
-            "extract picker",
-            KeyAction::Tmux("run-shell \"{{bin_path}} extract --launch-popup\"".into()),
-        ),
+        KeyNode::new_action("e", "extract picker", KeyAction::Extract),
         KeyNode::new_action("y", "paste buffer", KeyAction::Tmux("paste-buffer".into())),
         KeyNode::new_action("p", "paste buffer", KeyAction::Tmux("paste-buffer".into())),
         KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
@@ -363,19 +355,17 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action(
             "s",
             "flash jump",
-            KeyAction::Tmux("run-shell \"{{bin_path}} flash --launch-popup\"".into()),
+            KeyAction::Flash(crate::flash::FlashConfig::new_jump(false)),
         ),
         KeyNode::new_action(
             "S",
             "multi-pane flash",
-            KeyAction::Tmux(
-                "run-shell \"{{bin_path}} flash --launch-popup --multi-pane\"".into(),
-            ),
+            KeyAction::Flash(crate::flash::FlashConfig::new_jump(true)),
         ),
         KeyNode::new_action(
             "e",
             "extract picker",
-            KeyAction::Tmux("run-shell \"{{bin_path}} extract --launch-popup\"".into()),
+            KeyAction::Extract,
         ),
         KeyNode::new_action("v", "copy mode", KeyAction::CopyMode),
         KeyNode::new_action(

@@ -50,3 +50,29 @@ fn test_scroll_config_contains_flash_and_mouse() {
         "Must configure copy-mode-vi motions"
     );
 }
+
+#[test]
+fn interactive_bindings_release_the_tmux_queue_and_show_visual_status() {
+    use mox::tmux::{clean_status_left, generate_init_script};
+    let script = generate_init_script(&build_default_keymap(), "M-m", "/tmp/mox", Some("#S"));
+    for key in ["f", "F", "R"] {
+        let binding = script
+            .iter()
+            .find(|s| s.starts_with(&format!("bind-key -T copy-mode-vi {key} ")))
+            .unwrap();
+        assert!(binding.contains("run-shell -b"));
+        assert!(!binding.contains("command-prompt"));
+    }
+    let status = script
+        .iter()
+        .find(|s| s.starts_with("set -g status-left "))
+        .unwrap();
+    assert!(status.contains("selection_present,VISUAL,COPY"));
+    assert!(status.contains("◈"));
+    let base = status
+        .strip_prefix("set -g status-left \"")
+        .unwrap()
+        .strip_suffix('"')
+        .unwrap();
+    assert_eq!(clean_status_left(base), "#S");
+}

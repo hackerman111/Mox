@@ -1,6 +1,6 @@
 //! Interactive event loop and key event handling for the tree navigator.
 
-use super::action::{execute_nav_tmux, format_kill_command, switch_to_item};
+use super::action::{execute_nav_tmux, format_kill_command, format_rename_command, switch_to_item};
 use super::model::{TreeItem, fetch_tmux_snapshot, flatten_tree};
 use super::state::NavigatorApp;
 use super::view::render_navigator;
@@ -84,12 +84,20 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
                     KeyCode::Enter => {
                         let new_name = app.rename_buffer.trim().to_string();
                         if !new_name.is_empty() {
-                            let cmd = if target_type == "session" {
-                                format!("rename-session -t {target_id} '{new_name}'")
-                            } else {
-                                format!("rename-window -t {target_id} '{new_name}'")
-                            };
-                            let _ = execute_nav_tmux(socket, &cmd);
+                            if let Some(item) = items.iter().find(|item| match item {
+                                TreeItem::Session(s) => {
+                                    target_type == "session" && s.id == target_id
+                                }
+                                TreeItem::Window { window, .. } => {
+                                    target_type == "window" && window.id == target_id
+                                }
+                                TreeItem::Pane { pane, .. } => {
+                                    target_type == "pane" && pane.id == target_id
+                                }
+                            }) && let Some(cmd) = format_rename_command(item, &new_name)
+                            {
+                                execute_nav_tmux(socket, &cmd)?;
+                            }
                             if let Ok(fresh) = fetch_tmux_snapshot(socket) {
                                 app.sessions = fresh;
                             }
@@ -245,7 +253,10 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
                                 app.rename_target = Some(("window".to_string(), window.id.clone()));
                                 app.rename_buffer = window.name.clone();
                             }
-                            TreeItem::Pane { .. } => {}
+                            TreeItem::Pane { pane, .. } => {
+                                app.rename_target = Some(("pane".to_string(), pane.id.clone()));
+                                app.rename_buffer = pane.title.clone();
+                            }
                         }
                     }
                     app.pending_g = false;

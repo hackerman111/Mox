@@ -16,7 +16,7 @@ use crossterm::{
 
 use crate::extract::model::{EntityKind, ExtractedToken};
 use crate::extract::scanner::scan_lines;
-use crate::tmux::execute_tmux;
+use crate::tmux::{execute_tmux, execute_tmux_raw};
 use crate::tui::TuiGuard;
 
 /// The ordered list of categories cycled via Tab and BackTab.
@@ -63,7 +63,7 @@ impl ExtractState {
             filtered_indices: Vec::new(),
             selected_index: 0,
             current_category: None,
-            mode: PickerMode::Search,
+            mode: PickerMode::Normal,
         };
         state.apply_filter();
         state
@@ -172,7 +172,7 @@ pub fn launch_extract_popup(socket: Option<&str>, lines: usize) -> std::io::Resu
         .trim()
         .to_string();
 
-    let mut cmd = format!("{bin_path} extract --lines {lines} --target-pane '{target_pane}'");
+    let mut cmd = format!("'{bin_path}' extract --lines {lines} --target-pane '{target_pane}'");
     if let Some(sock) = socket {
         cmd.push_str(&format!(" --socket '{sock}'"));
     }
@@ -200,9 +200,19 @@ pub fn run_extract_picker(
     };
 
     let lines_arg = format!("-{lines}");
-    let raw = execute_tmux(socket, &["capture-pane", "-p", "-S", &lines_arg])
-        .or_else(|_| execute_tmux(socket, &["capture-pane", "-p"]))
-        .unwrap_or_default();
+    let raw = execute_tmux_raw(
+        socket,
+        &[
+            "capture-pane",
+            "-p",
+            "-t",
+            &active_pane_id,
+            "-S",
+            &lines_arg,
+        ],
+    )
+    .or_else(|_| execute_tmux_raw(socket, &["capture-pane", "-p", "-t", &active_pane_id]))
+    .unwrap_or_default();
 
     let captured_lines: Vec<String> = raw.lines().map(|s| s.to_string()).collect();
     let raw_tokens = scan_lines(&captured_lines, &active_pane_id);
@@ -235,6 +245,18 @@ pub fn run_extract_picker(
                 continue;
             }
 
+            // Cancellation always works, including while waiting for gf/gx.
+            if key_event.code == KeyCode::Esc
+                || (key_event.code == KeyCode::Char('c')
+                    && key_event.modifiers.contains(KeyModifiers::CONTROL))
+            {
+                if key_event.code == KeyCode::Esc && state.mode == PickerMode::Search {
+                    state.mode = PickerMode::Normal;
+                    pending_g = false;
+                    continue;
+                }
+                break;
+            }
             if pending_g {
                 pending_g = false;
                 match key_event.code {
@@ -654,7 +676,7 @@ fn render_extract_ui(
             "<Enter> Paste | <y> Copy | <o/gf> Edit | <gx> Web | <i> Search | <q/Esc> Quit"
         }
     };
-    let truncated_footer = truncate_str(footer_text, width);
+    let truncated_footer = truncate_str(footer_text, width.saturating_sub(1));
     execute!(
         out,
         cursor::MoveTo(0, footer_row),
@@ -775,7 +797,12 @@ pub fn open_in_editor(socket: Option<&str>, path: &str, line: Option<usize>) {
     };
 
     if execute_tmux(socket, &["new-window", "-n", "editor", &cmd]).is_err() {
-        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+        let _ = std::process::Command::new("xdg-open")
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
     }
 }
 
@@ -783,6 +810,16 @@ pub fn open_in_editor(socket: Option<&str>, path: &str, line: Option<usize>) {
 pub fn open_in_browser(url: &str) {
     let _ = std::process::Command::new("xdg-open")
         .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
-        .or_else(|_| std::process::Command::new("open").arg(url).spawn());
+        .or_else(|_| {
+            std::process::Command::new("open")
+                .arg(url)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+        });
 }

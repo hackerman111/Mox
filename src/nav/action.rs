@@ -45,15 +45,17 @@ pub fn format_kill_command(item: &TreeItem) -> String {
     }
 }
 
-/// Generates the tmux command string to rename a session or window.
+/// Generates the tmux command string to rename a session, window, or pane title.
 pub fn format_rename_command(item: &TreeItem, new_name: &str) -> Option<String> {
-    let clean_name = new_name.replace('\'', "");
+    let clean_name = new_name.replace('\'', "'\\''");
     match item {
         TreeItem::Session(s) => Some(format!("rename-session -t {} '{clean_name}'", s.id)),
         TreeItem::Window { window, .. } => {
             Some(format!("rename-window -t {} '{clean_name}'", window.id))
         }
-        TreeItem::Pane { .. } => None,
+        TreeItem::Pane { pane, .. } => {
+            Some(format!("select-pane -t {} -T '{clean_name}'", pane.id))
+        }
     }
 }
 

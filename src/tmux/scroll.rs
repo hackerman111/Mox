@@ -10,6 +10,12 @@ pub fn generate_scroll_config_with_bin(bin: &str) -> Vec<String> {
     vec![
         // Ensure vi mode keys are active in copy mode
         "set -g mode-keys vi".to_string(),
+        "set -wg mode-style 'fg=#2e3440,bg=#88c0d0,bold'".to_string(),
+        "set -wg copy-mode-match-style 'fg=#2e3440,bg=#ebcb8b'".to_string(),
+        "set -wg copy-mode-current-match-style 'fg=#2e3440,bg=#a3be8c,bold'".to_string(),
+        "set -wg copy-mode-selection-style 'fg=#2e3440,bg=#88c0d0'".to_string(),
+        "set -wg copy-mode-position-style 'fg=#2e3440,bg=#b48ead,bold'".to_string(),
+        "set -wg copy-mode-position-format ' ◈ #{?selection_present,VISUAL,COPY} · #{scroll_position}/#{history_size} '".to_string(),
         // Seamless mouse wheel scrolling into copy mode
         "bind-key -n WheelUpPane if-shell -F \"#{||:#{pane_in_mode},#{mouse_any_flag}}\" \"send-keys -M\" \"copy-mode -e; send-keys -M\"".to_string(),
         // Core vertical motions
@@ -34,11 +40,11 @@ pub fn generate_scroll_config_with_bin(bin: &str) -> Vec<String> {
         "bind-key -T copy-mode-vi v send-keys -X begin-selection".to_string(),
         "bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel".to_string(),
         // Flash Jump and Extract integration in copy-mode-vi
-        format!("bind-key -T copy-mode-vi s run-shell \"{bin} flash --launch-popup\""),
-        format!("bind-key -T copy-mode-vi S run-shell \"{bin} flash --launch-popup --multi-pane\""),
-        format!("bind-key -T copy-mode-vi e run-shell \"{bin} extract --launch-popup\""),
-        format!("bind-key -T copy-mode-vi R run-shell \"{bin} flash --launch-popup --mode remote-yank\""),
-        format!("bind-key -T copy-mode-vi f command-prompt -1 -p \"(char forward)\" \"run-shell '{bin} flash --launch-popup --mode char-motion --char %%%'\""),
-        format!("bind-key -T copy-mode-vi F command-prompt -1 -p \"(char backward)\" \"run-shell '{bin} flash --launch-popup --mode char-motion --backward --char %%%'\""),
+        format!("bind-key -T copy-mode-vi s run-shell -b \"'{bin}' flash --launch-popup\""),
+        format!("bind-key -T copy-mode-vi S run-shell -b \"'{bin}' flash --launch-popup --multi-pane\""),
+        format!("bind-key -T copy-mode-vi e run-shell -b \"'{bin}' extract --launch-popup\""),
+        format!("bind-key -T copy-mode-vi R run-shell -b \"'{bin}' flash --launch-popup --mode remote-yank\""),
+        format!("bind-key -T copy-mode-vi f run-shell -b \"'{bin}' flash --launch-popup --mode char-motion\""),
+        format!("bind-key -T copy-mode-vi F run-shell -b \"'{bin}' flash --launch-popup --mode char-motion --backward\""),
     ]
 }

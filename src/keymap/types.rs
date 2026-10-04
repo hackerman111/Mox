@@ -11,6 +11,10 @@ pub enum KeyAction {
     Confirm { prompt: String, command: String },
     /// Enter tmux copy/scroll mode with Vim navigation.
     CopyMode,
+    /// Interactive Flash overlay, also dispatched from which-key menus.
+    Flash(crate::flash::FlashConfig),
+    /// Categorized token picker.
+    Extract,
     /// Launch the which-key help popup.
     WhichKey,
     /// Launch the built-in tea timer.

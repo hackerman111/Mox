@@ -4,6 +4,11 @@ use std::process::Command;
 
 /// Execute a tmux command with optional socket name.
 pub fn execute_tmux(socket: Option<&str>, args: &[&str]) -> Result<String, String> {
+    execute_tmux_raw(socket, args).map(|output| output.trim().to_string())
+}
+
+/// Execute a tmux command without stripping coordinate-bearing capture output.
+pub fn execute_tmux_raw(socket: Option<&str>, args: &[&str]) -> Result<String, String> {
     let mut cmd = Command::new("tmux");
     if let Some(s) = socket {
         cmd.args(["-L", s]);
@@ -18,7 +23,8 @@ pub fn execute_tmux(socket: Option<&str>, args: &[&str]) -> Result<String, Strin
         return Err(format!("tmux command failed: {stderr}"));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    // Pane captures are coordinate data: leading blank rows and indentation matter.
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// Applies a list of tmux configuration lines via `source-file -`.

@@ -3,9 +3,12 @@
 use super::scroll;
 use crate::keymap::{KeyAction, KeyNode};
 
+const VISUAL_INDICATOR: &str = "#{?#{==:#{pane_mode},copy-mode},#[fg=#2e3440]#[bg=#88c0d0]#[bold] ◈ #{?selection_present,VISUAL,COPY} #[default] ,}";
+
 /// Strips any previously injected mox or moch indicator from a status-left string.
 pub fn clean_status_left(s: &str) -> String {
     let mut cleaned = s.trim().to_string();
+    cleaned = cleaned.replace(VISUAL_INDICATOR, "");
     if let Some(pos) = cleaned.find("#{E:@mox_indicator}") {
         cleaned.replace_range(pos..pos + "#{E:@mox_indicator}".len(), "");
     }
@@ -70,7 +73,7 @@ pub fn generate_init_script(
     };
 
     lines.push(format!(
-        "set -g status-left \"{indicator_fmt}{base_status_left}\""
+        "set -g status-left \"{VISUAL_INDICATOR}{indicator_fmt}{base_status_left}\""
     ));
 
     // 3. Popup border styling: transparent border background ensures rounded corners do not bleed opaque pixels
@@ -195,6 +198,19 @@ fn generate_table_bindings(
                 KeyAction::Confirm { prompt, command } => {
                     lines.push(format!(
                         "bind-key -T {table_name} {} confirm-before -p \"{prompt}\" \"{command}\"",
+                        child.key
+                    ));
+                }
+                KeyAction::Flash(cfg) => {
+                    let command = crate::flash::build_flash_command(bin_path, cfg, None);
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S ; run-shell -b \"{command} --launch-popup\" }}",
+                        child.key
+                    ));
+                }
+                KeyAction::Extract => {
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S ; run-shell -b \"'{bin_path}' extract --launch-popup\" }}",
                         child.key
                     ));
                 }

@@ -19,7 +19,7 @@ use crate::flash::labeler::{LabeledTarget, MatchTarget, assign_labels};
 use crate::flash::matcher::{find_char_motion_matches, find_matches, find_token_matches};
 use crate::flash::overlay::{FlashConfig, FlashMode};
 use crate::flash::text_object::{TextObject, resolve_text_object};
-use crate::tmux::execute_tmux;
+use crate::tmux::{execute_tmux, execute_tmux_raw};
 use crate::tui::TuiGuard;
 
 /// Copies text to the tmux paste buffer and the system clipboard.
@@ -30,6 +30,9 @@ pub fn copy_to_clipboard_and_tmux(socket: Option<&str>, text: &str) {
     // 2. Wayland clipboard (wl-copy)
     if let Ok(mut child) = Command::new("wl-copy")
         .stdin(std::process::Stdio::piped())
+        // Clipboard daemons must not keep the popup PTY alive after selection.
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
     {
         if let Some(mut stdin) = child.stdin.take() {
@@ -43,6 +46,9 @@ pub fn copy_to_clipboard_and_tmux(socket: Option<&str>, text: &str) {
     if let Ok(mut child) = Command::new("xclip")
         .args(["-selection", "clipboard"])
         .stdin(std::process::Stdio::piped())
+        // Clipboard daemons must not keep the popup PTY alive after selection.
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
     {
         if let Some(mut stdin) = child.stdin.take() {
@@ -55,6 +61,9 @@ pub fn copy_to_clipboard_and_tmux(socket: Option<&str>, text: &str) {
     // 4. macOS clipboard (pbcopy)
     if let Ok(mut child) = Command::new("pbcopy")
         .stdin(std::process::Stdio::piped())
+        // Clipboard daemons must not keep the popup PTY alive after selection.
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
     {
         if let Some(mut stdin) = child.stdin.take() {
@@ -69,8 +78,18 @@ pub fn open_target(socket: Option<&str>, text: &str, line: Option<usize>, _col: 
     if text.starts_with("http://") || text.starts_with("https://") || text.starts_with("git@") {
         let _ = Command::new("xdg-open")
             .arg(text)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn()
-            .or_else(|_| Command::new("open").arg(text).spawn());
+            .or_else(|_| {
+                Command::new("open")
+                    .arg(text)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+            });
     } else {
         let editor = std::env::var("EDITOR")
             .or_else(|_| std::env::var("VISUAL"))
@@ -82,7 +101,12 @@ pub fn open_target(socket: Option<&str>, text: &str, line: Option<usize>, _col: 
         };
 
         if execute_tmux(socket, &["new-window", "-n", "editor", "--", &cmd]).is_err() {
-            let _ = Command::new("xdg-open").arg(text).spawn();
+            let _ = Command::new("xdg-open")
+                .arg(text)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
         }
     }
 }
@@ -95,7 +119,13 @@ pub fn jump_to_target(
     col: usize,
 ) -> Result<(), String> {
     execute_tmux(socket, &["select-pane", "-t", pane_id])?;
-    execute_tmux(socket, &["copy-mode", "-t", pane_id])?;
+    let mode = execute_tmux(
+        socket,
+        &["display-message", "-p", "-t", pane_id, "#{pane_mode}"],
+    )?;
+    if mode != "copy-mode" {
+        execute_tmux(socket, &["copy-mode", "-t", pane_id])?;
+    }
     execute_tmux(socket, &["send-keys", "-X", "-t", pane_id, "top-line"])?;
     if row > 0 {
         let count_str = row.to_string();
@@ -155,13 +185,13 @@ fn capture_panes_content(
             "-p",
             "-t",
             tp,
-            "#{cursor_x},#{cursor_y},#{pane_id}",
+            "#{?#{==:#{pane_mode},copy-mode},#{copy_cursor_x},#{cursor_x}},#{?#{==:#{pane_mode},copy-mode},#{copy_cursor_y},#{cursor_y}},#{pane_id}",
         ]
     } else {
         vec![
             "display-message",
             "-p",
-            "#{cursor_x},#{cursor_y},#{pane_id}",
+            "#{?#{==:#{pane_mode},copy-mode},#{copy_cursor_x},#{cursor_x}},#{?#{==:#{pane_mode},copy-mode},#{copy_cursor_y},#{cursor_y}},#{pane_id}",
         ]
     };
 
@@ -191,8 +221,7 @@ fn capture_panes_content(
                     let id = parts[0].to_string();
                     let left = parts[1].parse().unwrap_or(0);
                     let top = parts[2].parse().unwrap_or(0);
-                    let raw = execute_tmux(socket, &["capture-pane", "-p", "-t", &id])
-                        .unwrap_or_default();
+                    let raw = capture_visible_pane(socket, &id).unwrap_or_default();
                     let lines: Vec<String> = raw.lines().map(|s| s.to_string()).collect();
                     contents.push(PaneContent {
                         id,
@@ -209,8 +238,7 @@ fn capture_panes_content(
     }
 
     // Single-pane capture
-    let raw =
-        execute_tmux(socket, &["capture-pane", "-p", "-t", &active_pane_id]).unwrap_or_default();
+    let raw = capture_visible_pane(socket, &active_pane_id).unwrap_or_default();
     let lines: Vec<String> = raw.lines().map(|s| s.to_string()).collect();
     let content = PaneContent {
         id: active_pane_id.clone(),
@@ -220,6 +248,19 @@ fn capture_panes_content(
     };
 
     (vec![content], cursor_row, cursor_col, active_pane_id)
+}
+
+/// Capture the displayed viewport, including an existing scrollback selection.
+fn capture_visible_pane(socket: Option<&str>, pane: &str) -> Result<String, String> {
+    let mode = execute_tmux(
+        socket,
+        &["display-message", "-p", "-t", pane, "#{pane_mode}"],
+    )?;
+    if mode == "copy-mode" {
+        execute_tmux_raw(socket, &["capture-pane", "-p", "-M", "-t", pane])
+    } else {
+        execute_tmux_raw(socket, &["capture-pane", "-p", "-t", pane])
+    }
 }
 
 /// Renders the terminal overlay with dimmed text, highlighted badges, and a status bar.
@@ -319,7 +360,13 @@ fn render_flash_screen(
                 out,
                 SetBackgroundColor(bg),
                 SetForegroundColor(fg),
-                Print(&st.target.label),
+                Print(
+                    &st.target.label[..st
+                        .target
+                        .label
+                        .len()
+                        .min(term_w.saturating_sub(st.screen_c))]
+                ),
                 ResetColor
             )?;
 
@@ -340,6 +387,11 @@ fn render_flash_screen(
         }
     }
 
+    // Leave the last cell free: wrapping at the bottom would scroll the overlay.
+    let status: String = format!(" {prompt_title} │ {status_text} ")
+        .chars()
+        .take(term_w.saturating_sub(1))
+        .collect();
     // Render status bar at bottom row
     execute!(
         out,
@@ -347,7 +399,7 @@ fn render_flash_screen(
         Clear(ClearType::CurrentLine),
         SetBackgroundColor(Color::DarkBlue),
         SetForegroundColor(Color::White),
-        Print(format!(" {prompt_title} │ {status_text} ")),
+        Print(status),
         ResetColor
     )?;
 

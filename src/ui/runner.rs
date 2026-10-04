@@ -97,6 +97,25 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                                 continue;
                             }
                         }
+                        KeyAction::Flash(cfg) => {
+                            let bin = std::env::current_exe().map_err(|e| e.to_string())?;
+                            let command = crate::flash::build_flash_command(
+                                &bin.to_string_lossy(),
+                                cfg,
+                                socket,
+                            );
+                            launch_after_menu(socket, &format!("{command} --launch-popup"))?;
+                            break;
+                        }
+                        KeyAction::Extract => {
+                            let bin = std::env::current_exe().map_err(|e| e.to_string())?;
+                            let mut command = format!("'{}' extract --launch-popup", bin.display());
+                            if let Some(socket) = socket {
+                                command.push_str(&format!(" --socket '{socket}'"));
+                            }
+                            launch_after_menu(socket, &command)?;
+                            break;
+                        }
                         KeyAction::CopyMode => {
                             let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
                             let _ = execute_tmux(socket, &["refresh-client", "-S"]);
@@ -159,5 +178,20 @@ fn execute_shell_tmux(socket: Option<&str>, cmd_str: &str) -> Result<(), String>
         cmd.arg(format!("tmux {cmd_str}"));
     }
     let _ = cmd.status();
+    Ok(())
+}
+
+/// The background job survives closing the menu; tmux does not support nested popups.
+fn launch_after_menu(socket: Option<&str>, command: &str) -> Result<(), String> {
+    execute_tmux(socket, &["set-option", "key-table", "root"])?;
+    let tmux = socket.map_or_else(|| "tmux".to_string(), |s| format!("tmux -L '{s}'"));
+    execute_tmux(
+        socket,
+        &[
+            "run-shell",
+            "-b",
+            &format!("{tmux} display-popup -C; {command}"),
+        ],
+    )?;
     Ok(())
 }

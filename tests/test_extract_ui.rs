@@ -130,7 +130,7 @@ fn test_extract_state_selection_navigation() {
 fn test_extract_state_picker_mode() {
     use mox::extract::ui::PickerMode;
     let mut state = ExtractState::new(vec![]);
-    assert_eq!(state.mode, PickerMode::Search);
-    state.mode = PickerMode::Normal;
     assert_eq!(state.mode, PickerMode::Normal);
+    state.mode = PickerMode::Search;
+    assert_eq!(state.mode, PickerMode::Search);
 }

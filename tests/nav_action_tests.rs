@@ -97,5 +97,12 @@ fn test_kill_and_rename_command_generation() {
         format_rename_command(&item_win, "work").as_deref(),
         Some("rename-window -t @2 'work'")
     );
-    assert!(format_rename_command(&item_pane, "none").is_none());
+    assert_eq!(
+        format_rename_command(&item_pane, "name").as_deref(),
+        Some("select-pane -t %3 -T 'name'")
+    );
+    assert_eq!(
+        format_rename_command(&item_pane, "it's mine").as_deref(),
+        Some("select-pane -t %3 -T 'it'\\''s mine'")
+    );
 }

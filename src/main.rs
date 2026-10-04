@@ -75,7 +75,7 @@ enum Commands {
         mode: String,
 
         /// Match across all window panes instead of current pane
-        #[arg(short, long)]
+        #[arg(long)]
         multi_pane: bool,
 
         /// Entity filter for quick-yank or quick-open (path, url, hash, ip)
@@ -259,4 +259,15 @@ fn main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use clap::CommandFactory;
+
+    #[test]
+    fn cli_flags_are_unambiguous() {
+        Cli::command().debug_assert();
+    }
 }

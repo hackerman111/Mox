@@ -200,6 +200,24 @@ fn test_tmux_navigator_switch_and_actions_integration() {
     .expect("display-message failed");
     assert_eq!(win_name.trim(), "renamed_win");
 
+    let title = "it's my pane";
+    let rename = mox::nav::format_rename_command(&pane_item, title).unwrap();
+    execute_nav_tmux(Some(&server.socket), &rename).expect("rename pane title failed");
+    assert_eq!(
+        execute_tmux(
+            Some(&server.socket),
+            &[
+                "display-message",
+                "-p",
+                "-t",
+                &first_pane.id,
+                "#{pane_title}"
+            ]
+        )
+        .unwrap(),
+        title
+    );
+
     // 3. Test killing pane via execute_nav_tmux
     let second_pane = &first_win.panes[1];
     execute_nav_tmux(
@@ -229,11 +247,11 @@ fn test_tmux_flash_and_extract_integration() {
     let root_keys = execute_tmux(Some(&server.socket), &["list-keys", "-T", "mox"])
         .expect("list-keys mox failed");
     assert!(
-        root_keys.contains("flash --launch-popup"),
+        root_keys.contains("flash --mode jump --launch-popup"),
         "mox must contain flash jump"
     );
     assert!(
-        root_keys.contains("flash --launch-popup --multi-pane"),
+        root_keys.contains("flash --mode jump --multi-pane --launch-popup"),
         "mox must contain multi-pane flash"
     );
     assert!(
@@ -313,4 +331,32 @@ fn test_tmux_flash_and_extract_integration() {
             |t| t.kind == mox::extract::model::EntityKind::Hash && t.clean_text == "9f8e7d6c5b"
         )
     );
+}
+
+#[test]
+fn test_capture_preserves_rows_and_columns_and_jump_keeps_selection() {
+    use mox::flash::ui::jump_to_target;
+    use mox::tmux::execute_tmux_raw;
+    let Some(server) = TmuxTestServer::new("mox-coordinate-test") else {
+        eprintln!("tmux unavailable, skipping coordinate integration test");
+        return;
+    };
+    let socket = Some(server.socket.as_str());
+    // A literal format gives deterministic blank rows without relying on shell output.
+    let raw =
+        execute_tmux_raw(socket, &["display-message", "-p", "-l", "\n    token\n\n"]).unwrap();
+    assert_eq!(raw, "\n    token\n\n\n");
+    jump_to_target(socket, "%0", 2, 0).unwrap();
+    execute_tmux(socket, &["send-keys", "-X", "begin-selection"]).unwrap();
+    jump_to_target(socket, "%0", 4, 0).unwrap();
+    let cursor = execute_tmux(
+        socket,
+        &[
+            "display-message",
+            "-p",
+            "#{copy_cursor_y},#{selection_present},#{selection_start_y}",
+        ],
+    )
+    .unwrap();
+    assert_eq!(cursor, "4,1,2");
 }
