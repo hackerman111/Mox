@@ -53,7 +53,7 @@ pub fn generate_init_script(
     lines.push("# === Mox tmux initialization ===".into());
 
     // 1. Vim scroll configuration
-    lines.extend(scroll::generate_scroll_config());
+    lines.extend(scroll::generate_scroll_config_with_bin(bin_path));
 
     // 2. Status indicator configuration
     lines.push("# Modal status indicator".into());
@@ -138,11 +138,12 @@ fn generate_table_bindings(
                 format!(" Mox: {} ", child.label)
             };
 
-            let (w, h) = if child.key == "r" || child.key == "s" || child.key == "g" {
-                (68, 11)
-            } else {
-                (78, 14)
-            };
+            let (w, h) =
+                if child.key == "r" || child.key == "s" || child.key == "g" || child.key == "y" {
+                    (68, 11)
+                } else {
+                    (78, 14)
+                };
 
             let popup_cmd = format!(
                 "display-popup -w {w} -h {h} -y S -b rounded -T \"{title}\" -s \"fg=#eceff4,bg=#2e3440\" -S \"fg=#81a1c1,bg=default\" -E \"'{bin_path}' which-key --prefix '{prefix_arg}'\""
@@ -175,6 +176,7 @@ fn generate_table_bindings(
         } else if let Some(action) = &child.action {
             match action {
                 KeyAction::Tmux(cmd) => {
+                    let cmd = cmd.replace("{{bin_path}}", bin_path);
                     if cmd.contains("choose-tree") {
                         lines.push(format!(
                             "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S ; {cmd} }}",

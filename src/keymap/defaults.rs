@@ -77,7 +77,53 @@ pub fn build_default_keymap() -> KeyNode {
     ];
 
     // -------------------------------------------------------------
-    // 2. Sticky Window Mode ('w')
+    // 2. Session Submenu ('S' under window mode)
+    // -------------------------------------------------------------
+    let session_children = vec![
+        KeyNode::new_action("c", "new session", KeyAction::Tmux("new-session".into())),
+        KeyNode::new_action("n", "new session", KeyAction::Tmux("new-session".into())),
+        KeyNode::new_action(
+            ",",
+            "rename session",
+            KeyAction::Tmux("command-prompt -I \"#S\" \"rename-session '%%'\"".into()),
+        ),
+        KeyNode::new_action(
+            "D",
+            "kill session",
+            KeyAction::Confirm {
+                prompt: "kill-session #S? (y/n)".into(),
+                command: "kill-session".into(),
+            },
+        ),
+        KeyNode::new_action(
+            "d",
+            "detach client",
+            KeyAction::Tmux("detach-client".into()),
+        ),
+        KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action("t", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action(
+            "h",
+            "prev session",
+            KeyAction::Tmux("switch-client -p".into()),
+        ),
+        KeyNode::new_action(
+            "l",
+            "next session",
+            KeyAction::Tmux("switch-client -n".into()),
+        ),
+        KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
+        KeyNode::new_action(
+            "Escape",
+            "back to normal",
+            KeyAction::SwitchTable("mox".into()),
+        ),
+        KeyNode::new_action("i", "exit to insert", KeyAction::ExitModal),
+        KeyNode::new_action("M-m", "exit to insert", KeyAction::ExitModal),
+    ];
+
+    // -------------------------------------------------------------
+    // 3. Sticky Window Mode ('w')
     // -------------------------------------------------------------
     let mut window_children = vec![
         KeyNode::new_action(
@@ -113,6 +159,7 @@ pub fn build_default_keymap() -> KeyNode {
             "tree navigator",
             KeyAction::Navigator,
         ),
+        KeyNode::new_branch("S", "session menu", session_children),
         KeyNode::new_action("a", "agent toggle", KeyAction::AgentToggle),
         KeyNode::new_action("A", "agent create", KeyAction::AgentCreate),
         KeyNode::new_action(
@@ -189,55 +236,25 @@ pub fn build_default_keymap() -> KeyNode {
     }
 
     // -------------------------------------------------------------
-    // 3. Session Submenu ('S')
-    // -------------------------------------------------------------
-    let session_children = vec![
-        KeyNode::new_action("c", "new session", KeyAction::Tmux("new-session".into())),
-        KeyNode::new_action("n", "new session", KeyAction::Tmux("new-session".into())),
-        KeyNode::new_action(
-            ",",
-            "rename session",
-            KeyAction::Tmux("command-prompt -I \"#S\" \"rename-session '%%'\"".into()),
-        ),
-        KeyNode::new_action(
-            "D",
-            "kill session",
-            KeyAction::Confirm {
-                prompt: "kill-session #S? (y/n)".into(),
-                command: "kill-session".into(),
-            },
-        ),
-        KeyNode::new_action(
-            "d",
-            "detach client",
-            KeyAction::Tmux("detach-client".into()),
-        ),
-        KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
-        KeyNode::new_action("t", "tree navigator", KeyAction::Navigator),
-        KeyNode::new_action(
-            "h",
-            "prev session",
-            KeyAction::Tmux("switch-client -p".into()),
-        ),
-        KeyNode::new_action(
-            "l",
-            "next session",
-            KeyAction::Tmux("switch-client -n".into()),
-        ),
-        KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
-        KeyNode::new_action(
-            "Escape",
-            "back to normal",
-            KeyAction::SwitchTable("mox".into()),
-        ),
-        KeyNode::new_action("i", "exit to insert", KeyAction::ExitModal),
-        KeyNode::new_action("M-m", "exit to insert", KeyAction::ExitModal),
-    ];
-
-    // -------------------------------------------------------------
     // 4. Go To Submenu ('g')
     // -------------------------------------------------------------
     let goto_children = vec![
+        KeyNode::new_action(
+            "f",
+            "quick file open",
+            KeyAction::Tmux(
+                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-open --filter path\""
+                    .into(),
+            ),
+        ),
+        KeyNode::new_action(
+            "x",
+            "quick URL open",
+            KeyAction::Tmux(
+                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-open --filter url\""
+                    .into(),
+            ),
+        ),
         KeyNode::new_action("w", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
@@ -262,7 +279,50 @@ pub fn build_default_keymap() -> KeyNode {
     ];
 
     // -------------------------------------------------------------
-    // 5. Root Modal Keymap ('mox' / NORMAL mode)
+    // 5. Yank Submenu ('y')
+    // -------------------------------------------------------------
+    let yank_children = vec![
+        KeyNode::new_action(
+            "f",
+            "quick entity yank",
+            KeyAction::Tmux(
+                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-yank\"".into(),
+            ),
+        ),
+        KeyNode::new_action(
+            "h",
+            "quick hash yank",
+            KeyAction::Tmux(
+                "run-shell \"{{bin_path}} flash --launch-popup --mode quick-yank --filter hash\""
+                    .into(),
+            ),
+        ),
+        KeyNode::new_action(
+            "s",
+            "remote flash yank",
+            KeyAction::Tmux(
+                "run-shell \"{{bin_path}} flash --launch-popup --mode remote-yank\"".into(),
+            ),
+        ),
+        KeyNode::new_action(
+            "e",
+            "extract picker",
+            KeyAction::Tmux("run-shell \"{{bin_path}} extract --launch-popup\"".into()),
+        ),
+        KeyNode::new_action("y", "paste buffer", KeyAction::Tmux("paste-buffer".into())),
+        KeyNode::new_action("p", "paste buffer", KeyAction::Tmux("paste-buffer".into())),
+        KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
+        KeyNode::new_action(
+            "Escape",
+            "back to normal",
+            KeyAction::SwitchTable("mox".into()),
+        ),
+        KeyNode::new_action("i", "exit to insert", KeyAction::ExitModal),
+        KeyNode::new_action("M-m", "exit to insert", KeyAction::ExitModal),
+    ];
+
+    // -------------------------------------------------------------
+    // 6. Root Modal Keymap ('mox' / NORMAL mode)
     // -------------------------------------------------------------
     let mut root_children = vec![
         // AI Agents
@@ -299,17 +359,25 @@ pub fn build_default_keymap() -> KeyNode {
         ),
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action("Tab", "last window", KeyAction::Tmux("last-window".into())),
-        // Direct splits & layout
+        // Visual Navigation: Flash Jump & Copy Mode
         KeyNode::new_action(
             "s",
-            "split horizontal",
-            KeyAction::Tmux("split-window -v -c \"#{pane_current_path}\"".into()),
+            "flash jump",
+            KeyAction::Tmux("run-shell \"{{bin_path}} flash --launch-popup\"".into()),
         ),
         KeyNode::new_action(
-            "v",
-            "split vertical",
-            KeyAction::Tmux("split-window -h -c \"#{pane_current_path}\"".into()),
+            "S",
+            "multi-pane flash",
+            KeyAction::Tmux(
+                "run-shell \"{{bin_path}} flash --launch-popup --multi-pane\"".into(),
+            ),
         ),
+        KeyNode::new_action(
+            "e",
+            "extract picker",
+            KeyAction::Tmux("run-shell \"{{bin_path}} extract --launch-popup\"".into()),
+        ),
+        KeyNode::new_action("v", "copy mode", KeyAction::CopyMode),
         KeyNode::new_action(
             "c",
             "new window",
@@ -351,8 +419,8 @@ pub fn build_default_keymap() -> KeyNode {
         // Submodes
         KeyNode::new_sticky("r", "resize mode", resize_children),
         KeyNode::new_sticky("w", "window mode", window_children),
-        KeyNode::new_branch("S", "session menu", session_children),
         KeyNode::new_branch("g", "go to...", goto_children),
+        KeyNode::new_branch("y", "yank menu", yank_children),
         // Utilities & Scrolling
         KeyNode::new_action("[", "vim scrollback", KeyAction::CopyMode),
         KeyNode::new_action("T", "tea timer", KeyAction::TeaTimer),
@@ -363,7 +431,6 @@ pub fn build_default_keymap() -> KeyNode {
             "command prompt",
             KeyAction::Tmux("command-prompt".into()),
         ),
-        KeyNode::new_action("y", "paste buffer", KeyAction::Tmux("paste-buffer".into())),
         KeyNode::new_action("?", "which-key help", KeyAction::WhichKey),
         KeyNode::new_action("Space", "which-key help", KeyAction::WhichKey),
         // Exits to Insert Mode

@@ -129,7 +129,8 @@ fn test_confirmations_for_dangerous_operations() {
     }
 
     // kill session confirmation in session mode (D)
-    let session_node = root.find_child("S").unwrap();
+    let window_node = root.find_child("w").unwrap();
+    let session_node = window_node.find_child("S").unwrap();
     let kill_session = session_node.find_child("D").unwrap();
     match &kill_session.action {
         Some(KeyAction::Confirm { prompt, command }) => {
@@ -220,8 +221,8 @@ fn test_navigator_exits_modal_mode() {
 
     let mox_s_s = script
         .iter()
-        .find(|l| l.contains("bind-key -T mox_S s"))
-        .expect("mox_S s binding missing");
+        .find(|l| l.contains("bind-key -T mox_w_S s"))
+        .expect("mox_w_S s binding missing");
     assert!(
         mox_s_s.contains("set-option key-table root"),
         "navigator must exit to root key-table: {mox_s_s}"

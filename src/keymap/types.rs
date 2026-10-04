@@ -40,6 +40,47 @@ pub struct KeyNode {
     pub sticky: bool,
 }
 
+/// Trait for types that can match a key string (e.g. `&str`, `char`, `String`).
+pub trait KeyMatcher {
+    /// Returns true if this matcher matches `key`.
+    fn matches_key(&self, key: &str) -> bool;
+}
+
+impl KeyMatcher for &str {
+    #[inline]
+    fn matches_key(&self, key: &str) -> bool {
+        *self == key
+    }
+}
+
+impl KeyMatcher for &String {
+    #[inline]
+    fn matches_key(&self, key: &str) -> bool {
+        self.as_str() == key
+    }
+}
+
+impl KeyMatcher for String {
+    #[inline]
+    fn matches_key(&self, key: &str) -> bool {
+        self.as_str() == key
+    }
+}
+
+impl KeyMatcher for char {
+    #[inline]
+    fn matches_key(&self, key: &str) -> bool {
+        key.len() == self.len_utf8() && key.starts_with(*self)
+    }
+}
+
+impl KeyMatcher for &char {
+    #[inline]
+    fn matches_key(&self, key: &str) -> bool {
+        key.len() == self.len_utf8() && key.starts_with(**self)
+    }
+}
+
 impl KeyNode {
     /// Create a leaf node with an action.
     pub fn new_action(key: impl Into<String>, label: impl Into<String>, action: KeyAction) -> Self {
@@ -82,9 +123,9 @@ impl KeyNode {
         }
     }
 
-    /// Look up an immediate child by key string.
-    pub fn find_child(&self, key: &str) -> Option<&KeyNode> {
-        self.children.iter().find(|c| c.key == key)
+    /// Look up an immediate child by key string or character.
+    pub fn find_child<K: KeyMatcher>(&self, key: K) -> Option<&KeyNode> {
+        self.children.iter().find(|c| key.matches_key(&c.key))
     }
 
     /// Recursively resolve a path of keys (e.g. `["w", "s"]`).
