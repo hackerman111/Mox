@@ -62,6 +62,10 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
 
                 if let Some(action) = &child.action {
                     match action {
+                        KeyAction::Feature(action) => {
+                            crate::actions::run(*action, socket)?;
+                            break;
+                        }
                         KeyAction::Tmux(cmd) => {
                             if cmd.contains("choose-tree") {
                                 let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
@@ -170,28 +174,10 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
 }
 
 fn execute_shell_tmux(socket: Option<&str>, cmd_str: &str) -> Result<(), String> {
-    let mut cmd = std::process::Command::new("sh");
-    cmd.arg("-c");
-    if let Some(s) = socket {
-        cmd.arg(format!("tmux -L {s} {cmd_str}"));
-    } else {
-        cmd.arg(format!("tmux {cmd_str}"));
-    }
-    let _ = cmd.status();
-    Ok(())
+    crate::tmux::apply_tmux_commands(socket, &[cmd_str.into()])
 }
 
 /// The background job survives closing the menu; tmux does not support nested popups.
 fn launch_after_menu(socket: Option<&str>, command: &str) -> Result<(), String> {
-    execute_tmux(socket, &["set-option", "key-table", "root"])?;
-    let tmux = socket.map_or_else(|| "tmux".to_string(), |s| format!("tmux -L '{s}'"));
-    execute_tmux(
-        socket,
-        &[
-            "run-shell",
-            "-b",
-            &format!("{tmux} display-popup -C; {command}"),
-        ],
-    )?;
-    Ok(())
+    crate::tmux::launch_after_popup(socket, command)
 }

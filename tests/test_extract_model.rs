@@ -19,3 +19,15 @@ fn test_extracted_token_creation() {
     assert_eq!(token.line_number, Some(42));
     assert_eq!(token.col_number, Some(10));
 }
+
+#[test]
+fn test_entity_kind_labels_parse_all_variants() {
+    for kind in EntityKind::ALL {
+        assert_eq!(EntityKind::parse(kind.label()), Some(kind));
+    }
+    assert_eq!(
+        EntityKind::parse("docker-image"),
+        Some(EntityKind::DockerImage)
+    );
+    assert_eq!(EntityKind::parse("not-a-kind"), None);
+}

@@ -1,0 +1,77 @@
+{
+  "scenario_zero_editors": {
+    "panes": [
+      {
+        "pane_id": "%0",
+        "current_command": "bash",
+        "current_path": "/home/user/Rust_project/moch",
+        "is_neovim": false
+      },
+      {
+        "pane_id": "%1",
+        "current_command": "cargo",
+        "current_path": "/home/user/Rust_project/moch",
+        "is_neovim": false
+      }
+    ],
+    "target_file": "src/lib.rs:10:2",
+    "expected_action": "CreateEditorWindowOrPane"
+  },
+  "scenario_single_editor": {
+    "panes": [
+      {
+        "pane_id": "%0",
+        "current_command": "bash",
+        "current_path": "/home/user/Rust_project/moch",
+        "is_neovim": false
+      },
+      {
+        "pane_id": "%1",
+        "current_command": "nvim",
+        "current_path": "/home/user/Rust_project/moch",
+        "is_neovim": true,
+        "server_name": "/tmp/nvim-user/socket-1234.sock"
+      }
+    ],
+    "target_file": "src/ui/theme.rs:15:1",
+    "expected_action": "DispatchToPane",
+    "expected_pane_id": "%1"
+  },
+  "scenario_multiple_editors_different_cwd": {
+    "panes": [
+      {
+        "pane_id": "%2",
+        "current_command": "nvim",
+        "current_path": "/home/user/Rust_project/moch",
+        "is_neovim": true
+      },
+      {
+        "pane_id": "%5",
+        "current_command": "nvim",
+        "current_path": "/home/user/dotfiles",
+        "is_neovim": true
+      }
+    ],
+    "target_file": "src/main.rs:25:5",
+    "ambiguous_relative_path": true,
+    "expected_action": "PromptPickerBetweenEditors"
+  },
+  "scenario_ambiguous_filename": {
+    "target_file": "README.md",
+    "panes": [
+      {
+        "pane_id": "%10",
+        "current_command": "nvim",
+        "current_path": "/home/user/project-a",
+        "is_neovim": true
+      },
+      {
+        "pane_id": "%11",
+        "current_command": "nvim",
+        "current_path": "/home/user/project-b",
+        "is_neovim": true
+      }
+    ],
+    "expected_action": "PromptPickerBetweenEditors"
+  }
+}

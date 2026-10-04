@@ -1,7 +1,6 @@
 //! Fast token scanner and entity extraction pipeline.
 //!
-//! Provides zero-external-dependency extraction of paths, URLs, git hashes,
-//! IP addresses, and quoted literals from terminal output and scrollback lines.
+//! Extracts common entities from terminal output and scrollback lines.
 
 use crate::extract::model::{EntityKind, ExtractedToken};
 
@@ -11,21 +10,27 @@ use crate::extract::model::{EntityKind, ExtractedToken};
 pub fn scan_line(line: &str, screen_row: usize, pane_id: &str) -> Vec<ExtractedToken> {
     let mut tokens = Vec::new();
     let mut occupied_ranges = Vec::new();
+    let mut quoted_ranges = Vec::new();
 
-    // 1. Quoted literals (can span whitespace)
-    extract_quoted(line, screen_row, pane_id, &mut tokens);
-
-    // 2. URLs (takes precedence over paths, hashes, and IPs)
+    // Specific entities claim ranges before the less specific path/hash/IP and word passes.
+    extract_quoted(line, screen_row, pane_id, &mut tokens, &mut quoted_ranges);
     extract_urls(line, screen_row, pane_id, &mut tokens, &mut occupied_ranges);
-
-    // 3. IPv4 addresses
-    extract_ips(line, screen_row, pane_id, &occupied_ranges, &mut tokens);
-
-    // 4. File paths with slashes
-    extract_paths(line, screen_row, pane_id, &occupied_ranges, &mut tokens);
-
-    // 5. Git commit hashes / hex identifiers
-    extract_hashes(line, screen_row, pane_id, &occupied_ranges, &mut tokens);
+    extract_ipfs_cids(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_docker_images(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_kubernetes_resources(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_hex_colors(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_paths(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_hashes(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_ips(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_prompt_command(line, screen_row, pane_id, &mut occupied_ranges, &mut tokens);
+    extract_words(
+        line,
+        screen_row,
+        pane_id,
+        &occupied_ranges,
+        &quoted_ranges,
+        &mut tokens,
+    );
 
     // Sort tokens by screen column order for natural navigation hints
     tokens.sort_by_key(|t| (t.col_start, t.col_end));
@@ -86,8 +91,557 @@ fn is_overlapping(start: usize, end: usize, ranges: &[(usize, usize)]) -> bool {
         .any(|&(r_start, r_end)| start < r_end && end > r_start)
 }
 
+fn trimmed_word(word: &str) -> (usize, usize, &str) {
+    let left = word
+        .char_indices()
+        .take_while(|(_, c)| {
+            matches!(
+                *c,
+                ',' | ':'
+                    | ';'
+                    | '('
+                    | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '<'
+                    | '>'
+                    | '\''
+                    | '"'
+                    | '`'
+                    | '|'
+            )
+        })
+        .map(|(idx, c)| idx + c.len_utf8())
+        .last()
+        .unwrap_or(0);
+    let mut right = word.len();
+    while let Some(c) = word[..right].chars().next_back() {
+        if matches!(
+            c,
+            ',' | ':'
+                | ';'
+                | '('
+                | ')'
+                | '['
+                | ']'
+                | '{'
+                | '}'
+                | '<'
+                | '>'
+                | '\''
+                | '"'
+                | '`'
+                | '|'
+        ) {
+            right -= c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    let right = right.max(left);
+    (left, right, &word[left..right])
+}
+
+// The repeated line context keeps all scanner passes on the same coordinate convention.
+#[allow(clippy::too_many_arguments)]
+fn push_plain_token(
+    line: &str,
+    start: usize,
+    end: usize,
+    candidate: &str,
+    kind: EntityKind,
+    screen_row: usize,
+    pane_id: &str,
+    occupied_ranges: &mut Vec<(usize, usize)>,
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    let col_start = line[..start].chars().count();
+    let col_end = col_start + candidate.chars().count();
+    tokens.push(ExtractedToken {
+        kind,
+        raw_text: candidate.to_string(),
+        clean_text: candidate.to_string(),
+        line_number: None,
+        col_number: None,
+        pane_id: pane_id.to_string(),
+        screen_row,
+        col_start,
+        col_end,
+    });
+    occupied_ranges.push((start, end));
+}
+
+fn token_words(line: &str) -> impl Iterator<Item = (usize, usize, &str)> {
+    WordsWithOffsets::new(line).map(|(start, word)| {
+        let (left, right, candidate) = trimmed_word(word);
+        (start + left, start + right, candidate)
+    })
+}
+
+fn extract_ipfs_cids(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    occupied: &mut Vec<(usize, usize)>,
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    for (start, end, candidate) in token_words(line) {
+        if candidate.is_empty() || is_overlapping(start, end, occupied) || !valid_cid(candidate) {
+            continue;
+        }
+        push_plain_token(
+            line,
+            start,
+            end,
+            candidate,
+            EntityKind::IpfsCid,
+            screen_row,
+            pane_id,
+            occupied,
+            tokens,
+        );
+    }
+}
+
+fn valid_cid(candidate: &str) -> bool {
+    if candidate.starts_with("Qm") {
+        return candidate.len() == 46
+            && base58_decode(candidate)
+                .is_some_and(|bytes| bytes.len() == 34 && bytes[0] == 0x12 && bytes[1] == 0x20);
+    }
+    let Some(prefix) = candidate.chars().next() else {
+        return false;
+    };
+    let decoded = match prefix {
+        'b' => base32_decode(&candidate[1..], false),
+        'B' => base32_decode(&candidate[1..], true),
+        'z' => base58_decode(&candidate[1..]),
+        'f' | 'F' => decode_hex(&candidate[1..]),
+        _ => None,
+    };
+    decoded.is_some_and(|bytes| valid_cidv1_bytes(&bytes))
+}
+
+fn valid_cidv1_bytes(bytes: &[u8]) -> bool {
+    let Some((version, mut pos)) = read_varint(bytes, 0) else {
+        return false;
+    };
+    let Some((codec, next)) = read_varint(bytes, pos) else {
+        return false;
+    };
+    pos = next;
+    let Some((hash, next)) = read_varint(bytes, pos) else {
+        return false;
+    };
+    pos = next;
+    let Some((digest_len, next)) = read_varint(bytes, pos) else {
+        return false;
+    };
+    pos = next;
+    version == 1
+        && codec > 0
+        && hash > 0
+        && digest_len > 0
+        && bytes.len() == pos + digest_len as usize
+}
+
+fn read_varint(bytes: &[u8], mut pos: usize) -> Option<(u64, usize)> {
+    let start = pos;
+    let mut value = 0u64;
+    loop {
+        let byte = *bytes.get(pos)?;
+        let shift = (pos - start).checked_mul(7)?;
+        if shift >= 64 || (shift == 63 && byte & 0x7e != 0) {
+            return None;
+        }
+        value |= u64::from(byte & 0x7f) << shift;
+        pos += 1;
+        if byte & 0x80 == 0 {
+            return Some((value, pos));
+        }
+    }
+}
+
+fn base32_decode(text: &str, uppercase: bool) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() * 5 / 8);
+    let mut acc = 0u16;
+    let mut bits = 0;
+    for byte in text.bytes() {
+        let value = match (uppercase, byte) {
+            (false, b'a'..=b'z') => byte - b'a',
+            (true, b'A'..=b'Z') => byte - b'A',
+            (_, b'2'..=b'7') => byte - b'2' + 26,
+            _ => return None,
+        };
+        acc = (acc << 5) | u16::from(value);
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    (bits == 0 || acc == 0).then_some(out)
+}
+
+fn decode_hex(text: &str) -> Option<Vec<u8>> {
+    if text.is_empty() || !text.len().is_multiple_of(2) {
+        return None;
+    }
+    text.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| Some((hex_value(pair[0])? << 4) | hex_value(pair[1])?))
+        .collect()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn base58_decode(text: &str) -> Option<Vec<u8>> {
+    const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    if text.is_empty() {
+        return None;
+    }
+    let mut little = vec![0u8];
+    for ch in text.bytes() {
+        let mut carry = ALPHABET.iter().position(|&b| b == ch)? as u32;
+        for digit in &mut little {
+            carry += u32::from(*digit) * 58;
+            *digit = carry as u8;
+            carry >>= 8;
+        }
+        while carry > 0 {
+            little.push(carry as u8);
+            carry >>= 8;
+        }
+    }
+    let zeroes = text.bytes().take_while(|&b| b == b'1').count();
+    let significant = if little.len() == 1 && little[0] == 0 {
+        0
+    } else {
+        little.len()
+    };
+    let mut bytes = vec![0; zeroes];
+    bytes.extend(little[..significant].iter().rev());
+    Some(bytes)
+}
+
+fn extract_docker_images(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    occupied: &mut Vec<(usize, usize)>,
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    for (start, end, candidate) in token_words(line) {
+        if is_overlapping(start, end, occupied) || !valid_docker_image(candidate) {
+            continue;
+        }
+        push_plain_token(
+            line,
+            start,
+            end,
+            candidate,
+            EntityKind::DockerImage,
+            screen_row,
+            pane_id,
+            occupied,
+            tokens,
+        );
+    }
+}
+
+fn valid_docker_image(value: &str) -> bool {
+    if value.contains("://") || value.is_empty() {
+        return false;
+    }
+    let (image, has_digest) = if let Some((image, digest)) = value.split_once("@sha256:") {
+        if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return false;
+        }
+        (image, true)
+    } else {
+        let Some((image, tag)) = value.rsplit_once(':') else {
+            return false;
+        };
+        if tag.is_empty()
+            || tag.len() > 128
+            || !tag
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+        {
+            return false;
+        }
+        (image, false)
+    };
+    let Some((registry, path)) = image.split_once('/') else {
+        return has_digest && valid_image_path(image);
+    };
+    let registry_valid = registry == "localhost"
+        || (registry.contains('.') || registry.contains(':'))
+            && registry.bytes().all(|b| {
+                b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-' | b':')
+            })
+            && registry
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && registry
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_alphanumeric);
+    let path_valid = valid_image_path(path);
+    registry_valid && path_valid
+}
+
+fn valid_image_path(path: &str) -> bool {
+    !path.is_empty()
+        && path.split('/').all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'-')
+                })
+        })
+}
+
+fn extract_kubernetes_resources(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    occupied: &mut Vec<(usize, usize)>,
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    for (start, end, candidate) in token_words(line) {
+        if is_overlapping(start, end, occupied) || !valid_kubernetes_resource(candidate) {
+            continue;
+        }
+        push_plain_token(
+            line,
+            start,
+            end,
+            candidate,
+            EntityKind::KubernetesResource,
+            screen_row,
+            pane_id,
+            occupied,
+            tokens,
+        );
+    }
+}
+
+fn valid_kubernetes_resource(value: &str) -> bool {
+    let Some((kind, name)) = value.split_once('/') else {
+        return false;
+    };
+    const KINDS: &[&str] = &[
+        "pod",
+        "pods",
+        "po",
+        "deployment",
+        "deployments",
+        "deploy",
+        "service",
+        "services",
+        "svc",
+        "namespace",
+        "namespaces",
+        "ns",
+        "statefulset",
+        "statefulsets",
+        "sts",
+        "daemonset",
+        "daemonsets",
+        "ds",
+        "replicaset",
+        "replicasets",
+        "rs",
+        "job",
+        "jobs",
+        "cronjob",
+        "cronjobs",
+        "cj",
+        "configmap",
+        "configmaps",
+        "cm",
+        "secret",
+        "secrets",
+        "ingress",
+        "ingresses",
+        "ing",
+        "node",
+        "nodes",
+        "no",
+        "pvc",
+        "pvcs",
+        "persistentvolumeclaim",
+        "persistentvolumeclaims",
+        "pv",
+        "persistentvolume",
+        "persistentvolumes",
+    ];
+    KINDS.contains(&kind)
+        && !name.is_empty()
+        && name.len() <= 253
+        && name.split('.').all(|label| {
+            !label.is_empty()
+                && label
+                    .as_bytes()
+                    .first()
+                    .is_some_and(u8::is_ascii_alphanumeric)
+                && label
+                    .as_bytes()
+                    .last()
+                    .is_some_and(u8::is_ascii_alphanumeric)
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
+fn extract_hex_colors(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    occupied: &mut Vec<(usize, usize)>,
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    for (start, end, candidate) in token_words(line) {
+        if is_overlapping(start, end, occupied)
+            || !matches!(candidate.len(), 4 | 7)
+            || !candidate.starts_with('#')
+            || !candidate[1..].bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            continue;
+        }
+        let before = line[..start].chars().next_back();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '#') {
+            continue;
+        }
+        push_plain_token(
+            line,
+            start,
+            end,
+            candidate,
+            EntityKind::HexColor,
+            screen_row,
+            pane_id,
+            occupied,
+            tokens,
+        );
+    }
+}
+
+fn extract_words(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    occupied: &[(usize, usize)],
+    quoted: &[(usize, usize)],
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    for (start, end, candidate) in token_words(line) {
+        if candidate.chars().count() < 5
+            || is_overlapping(start, end, occupied)
+            || is_overlapping(start, end, quoted)
+            || candidate.starts_with("#")
+        {
+            continue;
+        }
+        // Like extrakto's word filter, avoid selecting terminal box-drawing and control glyphs.
+        if candidate
+            .chars()
+            .any(|c| matches!(c, '\u{2500}'..='\u{27bf}' | '\u{e000}'..='\u{f8ff}'))
+        {
+            continue;
+        }
+        let col_start = line[..start].chars().count();
+        let col_end = col_start + candidate.chars().count();
+        tokens.push(ExtractedToken {
+            kind: EntityKind::Word,
+            raw_text: candidate.to_string(),
+            clean_text: candidate.to_string(),
+            line_number: None,
+            col_number: None,
+            pane_id: pane_id.to_string(),
+            screen_row,
+            col_start,
+            col_end,
+        });
+    }
+}
+
+fn extract_prompt_command(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    occupied: &mut Vec<(usize, usize)>,
+    tokens: &mut Vec<ExtractedToken>,
+) {
+    let leading = line.len() - line.trim_start().len();
+    let rest = &line[leading..];
+    let markers = ["$ ", "% ", "❯ ", "➜ "];
+    let marker_start =
+        if let Some(marker) = markers.iter().find(|marker| rest.starts_with(**marker)) {
+            leading + marker.len()
+        } else {
+            let Some(prompt) = rest.find("$ ") else {
+                return;
+            };
+            let prefix = &rest[..prompt];
+            if prefix.is_empty()
+                || prefix.contains(char::is_whitespace)
+                || !prefix.chars().all(|c| {
+                    c.is_alphanumeric() || matches!(c, '@' | ':' | '/' | '~' | '.' | '-' | '_')
+                })
+            {
+                return;
+            }
+            leading + prompt + 2
+        };
+    let candidate = line[marker_start..].trim_end();
+    if candidate.is_empty()
+        || candidate.starts_with('#')
+        || !candidate.split_whitespace().next().is_some_and(|command| {
+            command
+                .chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '+'))
+        })
+    {
+        return;
+    }
+    let end = marker_start + candidate.len();
+    let col_start = line[..marker_start].chars().count();
+    let col_end = col_start + candidate.chars().count();
+    tokens.push(ExtractedToken {
+        kind: EntityKind::Command,
+        raw_text: candidate.to_string(),
+        clean_text: candidate.to_string(),
+        line_number: None,
+        col_number: None,
+        pane_id: pane_id.to_string(),
+        screen_row,
+        col_start,
+        col_end,
+    });
+    occupied.push((leading, end));
+}
+
 /// Extracts strings enclosed in `"..."`, `'...'`, or `` `...` ``.
-fn extract_quoted(line: &str, screen_row: usize, pane_id: &str, tokens: &mut Vec<ExtractedToken>) {
+fn extract_quoted(
+    line: &str,
+    screen_row: usize,
+    pane_id: &str,
+    tokens: &mut Vec<ExtractedToken>,
+    quoted_ranges: &mut Vec<(usize, usize)>,
+) {
     let bytes = line.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -149,6 +703,7 @@ fn extract_quoted(line: &str, screen_row: usize, pane_id: &str, tokens: &mut Vec
                         col_start,
                         col_end,
                     });
+                    quoted_ranges.push((i, j + 1));
 
                     i = j + 1;
                     continue;
@@ -274,7 +829,7 @@ fn extract_ips(
     line: &str,
     screen_row: usize,
     pane_id: &str,
-    occupied_ranges: &[(usize, usize)],
+    occupied_ranges: &mut Vec<(usize, usize)>,
     tokens: &mut Vec<ExtractedToken>,
 ) {
     for (word_start, word) in WordsWithOffsets::new(line) {
@@ -327,6 +882,7 @@ fn extract_ips(
                 col_start,
                 col_end,
             });
+            occupied_ranges.push((cand_start, cand_end));
         }
     }
 }
@@ -396,7 +952,7 @@ fn extract_paths(
     line: &str,
     screen_row: usize,
     pane_id: &str,
-    occupied_ranges: &[(usize, usize)],
+    occupied_ranges: &mut Vec<(usize, usize)>,
     tokens: &mut Vec<ExtractedToken>,
 ) {
     for (word_start, word) in WordsWithOffsets::new(line) {
@@ -453,6 +1009,7 @@ fn extract_paths(
                 col_start,
                 col_end,
             });
+            occupied_ranges.push((cand_start, cand_end));
         }
     }
 }
@@ -462,7 +1019,7 @@ fn extract_hashes(
     line: &str,
     screen_row: usize,
     pane_id: &str,
-    occupied_ranges: &[(usize, usize)],
+    occupied_ranges: &mut Vec<(usize, usize)>,
     tokens: &mut Vec<ExtractedToken>,
 ) {
     for (word_start, word) in WordsWithOffsets::new(line) {
@@ -548,6 +1105,7 @@ fn extract_hashes(
             col_start,
             col_end,
         });
+        occupied_ranges.push((cand_start, cand_end));
     }
 }
 

@@ -116,7 +116,10 @@ pub fn build_flash_command(bin_path: &str, cfg: &FlashConfig, socket: Option<&st
         FlashMode::CharMotion => "char-motion",
     };
 
-    let mut cmd = format!("'{bin_path}' flash --mode {mode_str}");
+    let mut cmd = format!(
+        "{} flash --mode {mode_str}",
+        crate::tmux::shell_quote(bin_path)
+    );
 
     if cfg.multi_pane {
         cmd.push_str(" --multi-pane");
@@ -132,12 +135,20 @@ pub fn build_flash_command(bin_path: &str, cfg: &FlashConfig, socket: Option<&st
             EntityKind::Command => "command",
             EntityKind::Quoted => "quoted",
             EntityKind::Number => "number",
+            EntityKind::Word => "word",
+            EntityKind::DockerImage => "docker",
+            EntityKind::KubernetesResource => "k8s",
+            EntityKind::HexColor => "color",
+            EntityKind::IpfsCid => "ipfs",
         };
         cmd.push_str(&format!(" --filter {filter_name}"));
     }
 
     if let Some(ch) = cfg.motion_char {
-        cmd.push_str(&format!(" --char '{ch}'"));
+        cmd.push_str(&format!(
+            " --char {}",
+            crate::tmux::shell_quote(&ch.to_string())
+        ));
     }
 
     if !cfg.motion_forward {
@@ -145,11 +156,14 @@ pub fn build_flash_command(bin_path: &str, cfg: &FlashConfig, socket: Option<&st
     }
 
     if let Some(target) = &cfg.target_pane {
-        cmd.push_str(&format!(" --target-pane '{target}'"));
+        cmd.push_str(&format!(
+            " --target-pane {}",
+            crate::tmux::shell_quote(target)
+        ));
     }
 
     if let Some(sock) = socket {
-        cmd.push_str(&format!(" --socket '{sock}'"));
+        cmd.push_str(&format!(" --socket {}", crate::tmux::shell_quote(sock)));
     }
 
     cmd

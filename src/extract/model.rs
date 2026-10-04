@@ -19,6 +19,56 @@ pub enum EntityKind {
     Quoted,
     /// Standalone numeric value or identifier.
     Number,
+    /// A general token selected from terminal text.
+    Word,
+    /// A Docker image reference with an explicit registry and tag or digest.
+    DockerImage,
+    /// A Kubernetes resource in `kind/name` form.
+    KubernetesResource,
+    /// A three- or six-digit CSS hexadecimal color.
+    HexColor,
+    /// An IPFS content identifier (CIDv0 or CIDv1).
+    IpfsCid,
+}
+
+impl EntityKind {
+    pub const ALL: [Self; 13] = [
+        Self::Path,
+        Self::Url,
+        Self::Hash,
+        Self::Ip,
+        Self::Uuid,
+        Self::Command,
+        Self::Quoted,
+        Self::Number,
+        Self::Word,
+        Self::DockerImage,
+        Self::KubernetesResource,
+        Self::HexColor,
+        Self::IpfsCid,
+    ];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Path => "path",
+            Self::Url => "url",
+            Self::Hash => "hash",
+            Self::Ip => "ip",
+            Self::Uuid => "uuid",
+            Self::Command => "command",
+            Self::Quoted => "quoted",
+            Self::Number => "number",
+            Self::Word => "word",
+            Self::DockerImage => "docker-image",
+            Self::KubernetesResource => "kubernetes-resource",
+            Self::HexColor => "hex-color",
+            Self::IpfsCid => "ipfs-cid",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.label() == value)
+    }
 }
 
 /// A parsed token extracted from pane scrollback or screen content.

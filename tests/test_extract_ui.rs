@@ -16,6 +16,22 @@ fn test_extract_state_category_cycling() {
     state.cycle_category_forward();
     assert_eq!(state.current_category, Some(EntityKind::Command));
     state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::Uuid));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::Quoted));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::Number));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::DockerImage));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::KubernetesResource));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::HexColor));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::IpfsCid));
+    state.cycle_category_forward();
+    assert_eq!(state.current_category, Some(EntityKind::Word));
+    state.cycle_category_forward();
     assert_eq!(state.current_category, None);
 }
 
@@ -23,6 +39,22 @@ fn test_extract_state_category_cycling() {
 fn test_extract_state_category_cycling_backward() {
     let mut state = ExtractState::new(vec![]);
     assert_eq!(state.current_category, None);
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::Word));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::IpfsCid));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::HexColor));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::KubernetesResource));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::DockerImage));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::Number));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::Quoted));
+    state.cycle_category_backward();
+    assert_eq!(state.current_category, Some(EntityKind::Uuid));
     state.cycle_category_backward();
     assert_eq!(state.current_category, Some(EntityKind::Command));
     state.cycle_category_backward();
@@ -35,6 +67,44 @@ fn test_extract_state_category_cycling_backward() {
     assert_eq!(state.current_category, Some(EntityKind::Path));
     state.cycle_category_backward();
     assert_eq!(state.current_category, None);
+}
+
+#[test]
+fn test_extract_state_empty_category_and_refilter_preserves_original_selection() {
+    let mut state = ExtractState::new(vec![
+        token(EntityKind::Path, "alpha.rs"),
+        token(EntityKind::Url, "https://example.test"),
+        token(EntityKind::Path, "beta.rs"),
+    ]);
+    assert_eq!(state.filtered_indices, vec![0, 1, 2]);
+    state.selected_index = 2;
+    state.query = "beta".into();
+    state.apply_filter();
+    assert_eq!(state.filtered_indices, vec![2]);
+    assert_eq!(state.selected_index, 0);
+    state.query.clear();
+    state.apply_filter();
+    assert_eq!(state.selected_token().unwrap().clean_text, "beta.rs");
+
+    state.current_category = Some(EntityKind::DockerImage);
+    state.apply_filter();
+    assert!(state.filtered_indices.is_empty());
+    assert_eq!(state.selected_index, 0);
+    assert!(state.selected_token().is_none());
+}
+
+fn token(kind: EntityKind, text: &str) -> ExtractedToken {
+    ExtractedToken {
+        kind,
+        raw_text: text.into(),
+        clean_text: text.into(),
+        line_number: None,
+        col_number: None,
+        pane_id: "%0".into(),
+        screen_row: 0,
+        col_start: 0,
+        col_end: text.len(),
+    }
 }
 
 #[test]

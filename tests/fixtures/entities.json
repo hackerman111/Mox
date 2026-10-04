@@ -1,0 +1,54 @@
+[
+  {
+    "input": "Check the docs at https://github.com/hackerman111/Mox/blob/main/README.md for details",
+    "expected_kind": "Url",
+    "expected_token": "https://github.com/hackerman111/Mox/blob/main/README.md"
+  },
+  {
+    "input": "Error in src/ui/render.rs:42:15: expected semicolon",
+    "expected_kind": "Path",
+    "expected_token": "src/ui/render.rs",
+    "line": 42,
+    "col": 15
+  },
+  {
+    "input": "Commit 1edf9ddca70f4ec6f54c97950c057199276d414e was released",
+    "expected_kind": "Hash",
+    "expected_token": "1edf9ddca70f4ec6f54c97950c057199276d414e"
+  },
+  {
+    "input": "Listening on 192.168.1.105:8080",
+    "expected_kind": "Ip",
+    "expected_token": "192.168.1.105"
+  },
+  {
+    "input": "Run `cargo check --workspace --all-targets` before committing",
+    "expected_kind": "Command",
+    "expected_token": "cargo check --workspace --all-targets"
+  },
+  {
+    "input": "Pulled image ghcr.io/mox-dev/mox-builder:v1.2.0 successfully",
+    "expected_kind": "DockerImage",
+    "expected_token": "ghcr.io/mox-dev/mox-builder:v1.2.0"
+  },
+  {
+    "input": "Deployment apps/v1/deployment.apps/mox-server configured in default namespace",
+    "expected_kind": "KubernetesResource",
+    "expected_token": "deployment.apps/mox-server"
+  },
+  {
+    "input": "The theme background is set to #2E3440 and highlight is #88C0D0",
+    "expected_kind": "HexColor",
+    "expected_token": "#2E3440"
+  },
+  {
+    "input": "Stored snapshot with CID bafybeic56t3rwqf2aovwldvhq6w2wz53m44g3u7aip2",
+    "expected_kind": "IpfsCid",
+    "expected_token": "bafybeic56t3rwqf2aovwldvhq6w2wz53m44g3u7aip2"
+  },
+  {
+    "input": "Keyword: identifier",
+    "expected_kind": "Word",
+    "expected_token": "identifier"
+  }
+]

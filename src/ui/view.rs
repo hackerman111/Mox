@@ -1,11 +1,14 @@
 //! Which-key popup UI layout, grid formatting, and terminal rendering.
 
 use crate::keymap::{KeyAction, KeyNode};
+use crate::ui::render::{render_confirm, render_hints, render_toast};
+use crate::ui::status::{Mode, render_status_badge};
+use crate::ui::theme::Theme;
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style::{Attribute, Print, ResetColor, SetAttribute, SetForegroundColor},
     terminal::{self, Clear, ClearType},
 };
 use std::io::{Write, stdout};
@@ -99,37 +102,38 @@ pub fn render_menu(
     _prefix_str: &str,
     status_msg: Option<&str>,
 ) -> Result<(), String> {
+    let theme = Theme::nord();
     let mut out = stdout();
     execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0))
         .map_err(|e| format!("Render error: {e}"))?;
 
     let (cols, _rows) = terminal::size().unwrap_or((82, 15));
+    let cols = cols as usize;
 
     let mode_name = if node.label.is_empty() {
         "NORMAL"
     } else {
         &node.label
     };
-    let bg_color = match mode_name.to_uppercase().as_str() {
-        "RESIZE" => Color::Magenta,
-        "WINDOW" => Color::Yellow,
-        _ => Color::Green,
+
+    let mode = match mode_name.to_uppercase().as_str() {
+        "NORMAL" => Mode::Normal,
+        "PREFIX" => Mode::Prefix,
+        "COPY" => Mode::Copy,
+        "VISUAL" => Mode::Visual,
+        "RESIZE" => Mode::Resize,
+        "WINDOW" => Mode::Normal,
+        "SYNC" => Mode::Sync,
+        "SUSPEND" => Mode::Suspend,
+        "AGENT" => Mode::Agent,
+        _ => Mode::Normal,
     };
 
+    execute!(out, Print("  ")).map_err(|e| e.to_string())?;
+    render_status_badge(&mut out, mode, node.sticky, &theme).map_err(|e| e.to_string())?;
     execute!(
         out,
-        Print("  "),
-        SetBackgroundColor(bg_color),
-        SetForegroundColor(Color::Black),
-        Print(format!(" {} ", mode_name.to_uppercase())),
-        ResetColor,
-        SetForegroundColor(Color::DarkGrey),
-        Print(if node.sticky {
-            "  [STICKY]"
-        } else {
-            "  which-key"
-        }),
-        ResetColor,
+        Print(if node.sticky { "" } else { "  which-key" }),
         Print("\r\n\r\n")
     )
     .map_err(|e| e.to_string())?;
@@ -143,46 +147,42 @@ pub fn render_menu(
         1
     };
 
-    let col_w = (cols as usize / num_columns).max(22);
+    let col_w = (cols / num_columns).max(22);
 
     for chunk in display_items.chunks(num_columns) {
-        let mut line = String::new();
         for (key, label) in chunk {
-            let key_styled = format!("\x1b[1;33m{:<5}\x1b[0m", key);
             let max_label_len = col_w.saturating_sub(9).max(8);
-            let trunc_label: String = if label.chars().count() > max_label_len {
-                label.chars().take(max_label_len).collect()
-            } else {
-                label.clone()
-            };
-            let entry = format!(
-                "  {key_styled}  {:<width$}",
-                trunc_label,
-                width = max_label_len
-            );
-            line.push_str(&entry);
+            execute!(
+                out,
+                Print("  "),
+                SetForegroundColor(theme.warning),
+                SetAttribute(Attribute::Bold),
+                Print(super::render::truncate_or_pad(key, 5)),
+                SetAttribute(Attribute::Reset),
+                SetForegroundColor(theme.fg),
+                Print("  "),
+                Print(super::render::truncate_or_pad(label, max_label_len)),
+                ResetColor
+            )
+            .map_err(|e| e.to_string())?;
         }
-        execute!(out, Print(format!("{}\r\n", line.trim_end()))).map_err(|e| e.to_string())?;
+        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     }
 
     if let Some(msg) = status_msg {
-        execute!(
-            out,
-            Print("\r\n"),
-            SetForegroundColor(Color::Green),
-            Print(format!("  > {msg}\r\n")),
-            ResetColor
-        )
-        .map_err(|e| e.to_string())?;
+        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        render_toast(&mut out, msg, false, cols, &theme).map_err(|e| e.to_string())?;
+        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     } else {
-        execute!(
-            out,
-            Print("\r\n"),
-            SetForegroundColor(Color::DarkGrey),
-            Print("  [key] run    [q/Esc] back    [i] insert\r\n"),
-            ResetColor
+        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
+        render_hints(
+            &mut out,
+            "[key] run    [q/Esc] back    [i] insert",
+            cols,
+            &theme,
         )
         .map_err(|e| e.to_string())?;
+        execute!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     }
 
     out.flush().map_err(|e| e.to_string())?;
@@ -190,15 +190,11 @@ pub fn render_menu(
 }
 
 pub fn prompt_confirm(prompt: &str) -> Result<bool, String> {
+    let theme = Theme::nord();
     let mut out = stdout();
-    execute!(
-        out,
-        cursor::MoveToNextLine(1),
-        SetForegroundColor(Color::Red),
-        Print(format!("{prompt} ")),
-        ResetColor
-    )
-    .map_err(|e| e.to_string())?;
+    execute!(out, cursor::MoveToNextLine(1)).map_err(|e| e.to_string())?;
+    render_confirm(&mut out, prompt, &theme).map_err(|e| e.to_string())?;
+    execute!(out, Print(" (y/n) ")).map_err(|e| e.to_string())?;
     out.flush().map_err(|e| e.to_string())?;
 
     loop {

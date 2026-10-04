@@ -10,7 +10,27 @@ Press one key to enter modal mode, then use short key sequences to move between 
 
 ## Install
 
-Requirements: tmux. TPM also needs `curl` or `wget` to fetch a prebuilt binary. Cargo is only needed when no release binary is available for the platform.
+Requirements: tmux. The recommended install uses Cargo and needs Rust/Cargo. The legacy TPM loader can download a prebuilt release when one is available.
+
+### Cargo install (recommended)
+
+Clone the repository and install the binary:
+
+```sh
+git clone https://github.com/hackerman111/Mox.git
+cd Mox
+cargo install --path .
+```
+
+Cargo installs `mox` in `~/.cargo/bin` by default. Make sure that directory is on `PATH` for both your shell and the tmux server. Then add this line to `~/.tmux.conf`:
+
+```tmux
+run-shell 'mox init --apply'
+```
+
+Reload the config with `tmux source-file ~/.tmux.conf`. This applies Mox's native key tables and bindings without TPM. The default modal entry key is `M-m`; use `mox init --apply --entry-key M-x` to choose another key.
+
+See [Native workflows](docs/native-workflows.md) for editor setup, projects, session snapshots, and the new prefix bindings.
 
 ### TPM
 
@@ -23,9 +43,9 @@ set -g @plugin 'hackerman111/Mox'
 
 Keep the Mox entry after any theme plugin that sets `status-left`; Mox adds its mode indicator to that option. Reload tmux, then press your TPM install key (usually `prefix` + `I`). The loader downloads a prebuilt binary on supported systems and falls back to Cargo if none is available.
 
-### Manual install
+### Build from source
 
-Clone the repository. If no prebuilt release exists for your system, build the binary:
+For a local development build instead of installing with Cargo:
 
 ```sh
 git clone https://github.com/hackerman111/Mox.git
@@ -35,14 +55,14 @@ cargo build --release
 
 The release workflow builds binaries for Linux (glibc, x86-64/ARM64) and macOS (Intel/Apple Silicon). To publish one, push a `v` tag matching the version in `Cargo.toml` (for example, `v0.1.0`).
 
-Add the loader to `~/.tmux.conf`, using the absolute path to this checkout:
+The optional legacy `plugin.tmux` loader remains available for existing TPM setups. For a direct checkout-based loader without TPM, add this to `~/.tmux.conf`, using the absolute path to the checkout:
 
 ```tmux
 set -g @mox_entry_key M-m
 run-shell "/path/to/Mox/plugin.tmux"
 ```
 
-Reload tmux configuration with `tmux source-file ~/.tmux.conf`. The entry key defaults to `M-m`; set `@mox_entry_key` to change it.
+Reload tmux configuration with `tmux source-file ~/.tmux.conf`. The entry key defaults to `M-m`; pass `--entry-key` to `mox init` to change it.
 
 ## Use
 

@@ -18,6 +18,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    #[command(flatten)]
+    Native(mox::cli::Commands),
     /// Generate or apply tmux configuration for Mox
     Init {
         /// Entry key to toggle modal mode (default: M-m)
@@ -127,6 +129,12 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Native(command) => {
+            if let Err(error) = mox::cli::run(command) {
+                eprintln!("Mox: {error}");
+                return ExitCode::FAILURE;
+            }
+        }
         Commands::Init {
             entry_key,
             apply,
@@ -209,15 +217,16 @@ fn main() -> ExitCode {
                 _ => mox::flash::FlashMode::Jump,
             };
 
-            let entity_filter = filter
-                .as_deref()
-                .and_then(|f| match f.to_lowercase().as_str() {
-                    "path" => Some(mox::extract::EntityKind::Path),
-                    "url" => Some(mox::extract::EntityKind::Url),
-                    "hash" => Some(mox::extract::EntityKind::Hash),
-                    "ip" => Some(mox::extract::EntityKind::Ip),
-                    _ => None,
-                });
+            let entity_filter = match filter.as_deref() {
+                Some(value) => match mox::extract::EntityKind::parse(value) {
+                    Some(kind) => Some(kind),
+                    None => {
+                        eprintln!("Unknown entity filter: {value}");
+                        return ExitCode::FAILURE;
+                    }
+                },
+                None => None,
+            };
 
             let cfg = mox::flash::FlashConfig {
                 mode: flash_mode,

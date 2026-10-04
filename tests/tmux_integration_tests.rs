@@ -52,7 +52,7 @@ fn test_tmux_isolated_server_integration() {
     };
 
     let keymap = build_default_keymap();
-    let script = generate_init_script(&keymap, "M-m", "mox", Some("#S"));
+    let script = generate_init_script(&keymap, "M-m", env!("CARGO_BIN_EXE_mox"), Some("#S"));
 
     let result = apply_tmux_commands(Some(&server.socket), &script);
     assert!(
@@ -240,7 +240,7 @@ fn test_tmux_flash_and_extract_integration() {
     };
 
     let keymap = build_default_keymap();
-    let script = generate_init_script(&keymap, "M-m", "mox", Some("#S"));
+    let script = generate_init_script(&keymap, "M-m", env!("CARGO_BIN_EXE_mox"), Some("#S"));
     apply_tmux_commands(Some(&server.socket), &script).expect("failed to apply mox config");
 
     // Verify mox table has flash and extract bindings
@@ -296,13 +296,15 @@ fn test_tmux_flash_and_extract_integration() {
         Some(&server.socket),
         &[
             "send-keys",
+            "-l",
             "-t",
             "test",
             "echo 'https://github.com/foo/bar src/main.rs:10:2 9f8e7d6c5b'",
-            "Enter",
         ],
     )
     .expect("send-keys failed");
+    execute_tmux(Some(&server.socket), &["send-keys", "-t", "test", "Enter"])
+        .expect("send Enter failed");
 
     // Allow shell to render echo
     std::thread::sleep(std::time::Duration::from_millis(100));

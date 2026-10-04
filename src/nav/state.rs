@@ -1,31 +1,38 @@
-//! Navigator application state machine, search, and tree manipulation.
+//! Navigator application state and tree manipulation.
 
 use super::fuzzy::filter_sessions;
-use super::model::{SessionInfo, TreeItem, flatten_tree};
+use super::model::{SessionInfo, TreeItem, visible_tree};
+use crate::ui::picker::PickerState;
+
+#[derive(Debug)]
+pub enum CollapseTarget {
+    Session(String),
+    Window {
+        session_id: String,
+        window_id: String,
+    },
+}
 
 /// State for the interactive navigator TUI.
 pub struct NavigatorApp {
     pub sessions: Vec<SessionInfo>,
-    pub selected_index: usize,
-    pub search_query: String,
+    pub picker: PickerState,
     pub in_search_mode: bool,
     pub show_preview: bool,
     pub pending_g: bool,
     pub pending_d: bool,
-    pub confirm_action: Option<(String, String)>, // (prompt_text, command)
-    pub rename_target: Option<(String, String)>,  // (target_type, target_id)
+    pub confirm_action: Option<(String, String)>,
+    pub rename_target: Option<(String, String)>,
     pub rename_buffer: String,
     pub cached_preview_pane: String,
     pub cached_preview_lines: Vec<String>,
-    pub scroll_offset: usize,
 }
 
 impl NavigatorApp {
     pub fn new(sessions: Vec<SessionInfo>) -> Self {
         Self {
             sessions,
-            selected_index: 0,
-            search_query: String::new(),
+            picker: PickerState::default(),
             in_search_mode: false,
             show_preview: true,
             pending_g: false,
@@ -35,41 +42,76 @@ impl NavigatorApp {
             rename_buffer: String::new(),
             cached_preview_pane: String::new(),
             cached_preview_lines: Vec::new(),
-            scroll_offset: 0,
         }
     }
 
+    /// Compatibility helper for callers that need owned filtered models.
     pub fn filtered_sessions(&self) -> Vec<SessionInfo> {
-        filter_sessions(&self.sessions, &self.search_query)
+        filter_sessions(&self.sessions, &self.picker.query)
+    }
+
+    pub fn visible_items(&self) -> Vec<TreeItem<'_>> {
+        visible_tree(&self.sessions, &self.picker.query)
+    }
+
+    pub fn set_sessions(&mut self, sessions: Vec<SessionInfo>) {
+        self.sessions = sessions;
+        self.picker.selected = 0;
+        self.picker.offset = 0;
+        self.cached_preview_pane.clear();
+        self.cached_preview_lines.clear();
     }
 
     pub fn toggle_selected_collapse(&mut self, selected_idx: usize) {
-        let filtered = self.filtered_sessions();
-        let items = flatten_tree(&filtered);
-        if selected_idx >= items.len() {
-            return;
+        let target = self
+            .visible_items()
+            .get(selected_idx)
+            .and_then(collapse_target);
+        if let Some(target) = target {
+            self.toggle_collapse(target);
         }
+    }
 
-        match &items[selected_idx] {
-            TreeItem::Session(s) => {
-                let sid = s.id.clone();
-                if let Some(session) = self.sessions.iter_mut().find(|sess| sess.id == sid) {
+    pub fn toggle_collapse(&mut self, target: CollapseTarget) {
+        match target {
+            CollapseTarget::Session(session_id) => {
+                if let Some(session) = self
+                    .sessions
+                    .iter_mut()
+                    .find(|session| session.id == session_id)
+                {
                     session.collapsed = !session.collapsed;
                 }
             }
-            TreeItem::Window { session, window } => {
-                let sid = session.id.clone();
-                let wid = window.id.clone();
-                if let Some(win) = self
+            CollapseTarget::Window {
+                session_id,
+                window_id,
+            } => {
+                if let Some(window) = self
                     .sessions
                     .iter_mut()
-                    .find(|sess| sess.id == sid)
-                    .and_then(|sess| sess.windows.iter_mut().find(|w| w.id == wid))
+                    .find(|session| session.id == session_id)
+                    .and_then(|session| {
+                        session
+                            .windows
+                            .iter_mut()
+                            .find(|window| window.id == window_id)
+                    })
                 {
-                    win.collapsed = !win.collapsed;
+                    window.collapsed = !window.collapsed;
                 }
             }
-            TreeItem::Pane { .. } => {}
         }
+    }
+}
+
+pub fn collapse_target(item: &TreeItem<'_>) -> Option<CollapseTarget> {
+    match item {
+        TreeItem::Session(session) => Some(CollapseTarget::Session(session.id.clone())),
+        TreeItem::Window { session, window } => Some(CollapseTarget::Window {
+            session_id: session.id.clone(),
+            window_id: window.id.clone(),
+        }),
+        TreeItem::Pane { .. } => None,
     }
 }

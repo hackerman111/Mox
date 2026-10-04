@@ -4,13 +4,12 @@
 //! executes immediate entity yanking/opening, character motions, and remote text operations.
 
 use std::io::{Write, stdout};
-use std::process::Command;
 
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style::{Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{self, Clear, ClearType},
 };
 
@@ -21,93 +20,31 @@ use crate::flash::overlay::{FlashConfig, FlashMode};
 use crate::flash::text_object::{TextObject, resolve_text_object};
 use crate::tmux::{execute_tmux, execute_tmux_raw};
 use crate::tui::TuiGuard;
+use crate::ui::theme::Theme;
 
 /// Copies text to the tmux paste buffer and the system clipboard.
 pub fn copy_to_clipboard_and_tmux(socket: Option<&str>, text: &str) {
-    // 1. Set tmux buffer
-    let _ = execute_tmux(socket, &["set-buffer", "--", text]);
-
-    // 2. Wayland clipboard (wl-copy)
-    if let Ok(mut child) = Command::new("wl-copy")
-        .stdin(std::process::Stdio::piped())
-        // Clipboard daemons must not keep the popup PTY alive after selection.
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(text.as_bytes());
-        }
-        let _ = child.wait();
-        return;
-    }
-
-    // 3. X11 clipboard (xclip)
-    if let Ok(mut child) = Command::new("xclip")
-        .args(["-selection", "clipboard"])
-        .stdin(std::process::Stdio::piped())
-        // Clipboard daemons must not keep the popup PTY alive after selection.
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(text.as_bytes());
-        }
-        let _ = child.wait();
-        return;
-    }
-
-    // 4. macOS clipboard (pbcopy)
-    if let Ok(mut child) = Command::new("pbcopy")
-        .stdin(std::process::Stdio::piped())
-        // Clipboard daemons must not keep the popup PTY alive after selection.
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(text.as_bytes());
-        }
-        let _ = child.wait();
+    if let Err(error) = crate::clipboard::copy(socket, text) {
+        eprintln!("Clipboard: {error}");
     }
 }
 
-/// Opens a URL or filesystem path in the default browser or `$EDITOR`.
-pub fn open_target(socket: Option<&str>, text: &str, line: Option<usize>, _col: Option<usize>) {
-    if text.starts_with("http://") || text.starts_with("https://") || text.starts_with("git@") {
-        let _ = Command::new("xdg-open")
-            .arg(text)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .or_else(|_| {
-                Command::new("open")
-                    .arg(text)
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn()
-            });
+pub fn open_target(
+    socket: Option<&str>,
+    pane: Option<&str>,
+    text: &str,
+    line: Option<usize>,
+    col: Option<usize>,
+) -> Result<(), String> {
+    if text.starts_with("http://") || text.starts_with("https://") || text.starts_with("ipfs://") {
+        crate::clipboard::open_url(text)
     } else {
-        let editor = std::env::var("EDITOR")
-            .or_else(|_| std::env::var("VISUAL"))
-            .unwrap_or_else(|_| "nvim".to_string());
-        let cmd = if let Some(l) = line {
-            format!("{editor} +{l} {text}")
-        } else {
-            format!("{editor} {text}")
+        let location = crate::editor::Location {
+            path: text.into(),
+            line,
+            column: col,
         };
-
-        if execute_tmux(socket, &["new-window", "-n", "editor", "--", &cmd]).is_err() {
-            let _ = Command::new("xdg-open")
-                .arg(text)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
-        }
+        crate::editor::open(socket, pane, location)
     }
 }
 
@@ -272,6 +209,7 @@ fn render_flash_screen(
     status_text: &str,
     input_highlight: &str,
 ) -> std::io::Result<()> {
+    let theme = Theme::nord();
     let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
     let term_w = term_w as usize;
     let term_h = term_h as usize;
@@ -341,7 +279,7 @@ fn render_flash_screen(
                 let dimmed_slice: String = row_vec[curr_c..st.screen_c].iter().collect();
                 execute!(
                     out,
-                    SetForegroundColor(Color::DarkGrey),
+                    SetForegroundColor(theme.muted),
                     Print(&dimmed_slice),
                     ResetColor
                 )?;
@@ -351,9 +289,9 @@ fn render_flash_screen(
             let is_matched_prefix =
                 !input_highlight.is_empty() && st.target.label.starts_with(input_highlight);
             let (bg, fg) = if is_matched_prefix {
-                (Color::Green, Color::Black)
+                (theme.success, theme.bg)
             } else {
-                (Color::Yellow, Color::Black)
+                (theme.warning, theme.bg)
             };
 
             execute!(
@@ -379,7 +317,7 @@ fn render_flash_screen(
             if !trimmed.is_empty() {
                 execute!(
                     out,
-                    SetForegroundColor(Color::DarkGrey),
+                    SetForegroundColor(theme.muted),
                     Print(trimmed),
                     ResetColor
                 )?;
@@ -397,8 +335,8 @@ fn render_flash_screen(
         out,
         cursor::MoveTo(0, max_rows as u16),
         Clear(ClearType::CurrentLine),
-        SetBackgroundColor(Color::DarkBlue),
-        SetForegroundColor(Color::White),
+        SetBackgroundColor(theme.info),
+        SetForegroundColor(theme.bg),
         Print(status),
         ResetColor
     )?;
@@ -438,6 +376,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
 
             let labeled = assign_labels(&targets, cursor_row, cursor_col);
             let mut input_label = String::new();
+            let mut failure = None;
             let title = if cfg.mode == FlashMode::QuickYank {
                 "QUICK YANK"
             } else {
@@ -450,7 +389,14 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                     input_label,
                     labeled.len()
                 );
-                render_flash_screen(&mut out, &panes, &labeled, title, &status, &input_label)?;
+                render_flash_screen(
+                    &mut out,
+                    &panes,
+                    &labeled,
+                    title,
+                    failure.as_deref().unwrap_or(&status),
+                    &input_label,
+                )?;
 
                 if let Event::Key(key) = event::read()? {
                     if key.kind != KeyEventKind::Press {
@@ -478,14 +424,26 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                                     .map(|t| t.clean_text.as_str())
                                     .unwrap_or(&matched.target.matched_text);
 
-                                if cfg.mode == FlashMode::QuickYank {
-                                    copy_to_clipboard_and_tmux(socket, text);
+                                let result = if cfg.mode == FlashMode::QuickYank {
+                                    crate::clipboard::copy(socket, text)
                                 } else {
                                     let line_no = token.and_then(|t| t.line_number);
                                     let col_no = token.and_then(|t| t.col_number);
-                                    open_target(socket, text, line_no, col_no);
+                                    open_target(
+                                        socket,
+                                        Some(&matched.target.pane_id),
+                                        text,
+                                        line_no,
+                                        col_no,
+                                    )
+                                };
+                                match result {
+                                    Ok(()) => break,
+                                    Err(error) => {
+                                        failure = Some(error);
+                                        input_label.clear();
+                                    }
                                 }
-                                break;
                             }
 
                             if !labeled.iter().any(|lt| lt.label.starts_with(&input_label)) {

@@ -1,0 +1,94 @@
+{
+  "modes": [
+    {
+      "mode": "NORMAL",
+      "label": "NORMAL",
+      "color_role": "mode_normal",
+      "sticky": false
+    },
+    {
+      "mode": "PREFIX",
+      "label": "PREFIX",
+      "color_role": "mode_prefix",
+      "sticky": false
+    },
+    {
+      "mode": "COPY",
+      "label": "COPY",
+      "color_role": "mode_copy",
+      "sticky": false
+    },
+    {
+      "mode": "VISUAL",
+      "label": "VISUAL",
+      "color_role": "mode_visual",
+      "sticky": false
+    },
+    {
+      "mode": "RESIZE",
+      "label": "RESIZE",
+      "color_role": "mode_resize",
+      "sticky": true
+    },
+    {
+      "mode": "SYNC",
+      "label": "SYNC",
+      "color_role": "mode_sync",
+      "sticky": false
+    },
+    {
+      "mode": "SUSPEND",
+      "label": "SUSPEND",
+      "color_role": "mode_suspend",
+      "sticky": false
+    },
+    {
+      "mode": "AGENT",
+      "label": "AGENT",
+      "color_role": "mode_agent",
+      "sticky": false
+    }
+  ],
+  "process_classifications": [
+    {
+      "binary": "nvim",
+      "classification": "Editor",
+      "passthrough_navigation": true
+    },
+    {
+      "binary": "vim",
+      "classification": "Editor",
+      "passthrough_navigation": true
+    },
+    {
+      "binary": "lazygit",
+      "classification": "TuiApp",
+      "passthrough_navigation": false
+    },
+    {
+      "binary": "k9s",
+      "classification": "TuiApp",
+      "passthrough_navigation": false
+    },
+    {
+      "binary": "bash",
+      "classification": "Shell",
+      "passthrough_navigation": false
+    },
+    {
+      "binary": "zsh",
+      "classification": "Shell",
+      "passthrough_navigation": false
+    },
+    {
+      "binary": "cargo",
+      "classification": "BuildTool",
+      "passthrough_navigation": false
+    },
+    {
+      "binary": "ssh",
+      "classification": "RemoteSession",
+      "passthrough_navigation": false
+    }
+  ]
+}

@@ -4,58 +4,7 @@ use crate::nav::model::{PaneInfo, SessionInfo, WindowInfo};
 
 /// Computes a fuzzy subsequence match score between target and query.
 /// Returns `Some(score)` if all query characters appear in sequence in target, else `None`.
-pub fn fuzzy_match(target: &str, query: &str) -> Option<i64> {
-    if query.is_empty() {
-        return Some(0);
-    }
-
-    let target_chars: Vec<char> = target.chars().collect();
-    let query_chars: Vec<char> = query.chars().collect();
-
-    let mut t_idx = 0;
-    let mut q_idx = 0;
-    let mut score: i64 = 0;
-    let mut last_match_idx: Option<usize> = None;
-
-    while q_idx < query_chars.len() && t_idx < target_chars.len() {
-        let qc = query_chars[q_idx].to_ascii_lowercase();
-        let tc = target_chars[t_idx].to_ascii_lowercase();
-
-        if qc == tc {
-            score += 10;
-
-            // Prefix bonus
-            if t_idx == 0 {
-                score += 20;
-            }
-
-            // Word boundary bonus
-            if t_idx > 0 {
-                let prev = target_chars[t_idx - 1];
-                if prev == ' ' || prev == '/' || prev == '-' || prev == '_' || prev == '.' {
-                    score += 15;
-                }
-            }
-
-            // Consecutive match bonus
-            if last_match_idx == Some(t_idx.saturating_sub(1)) {
-                score += 10;
-            }
-
-            last_match_idx = Some(t_idx);
-            q_idx += 1;
-        }
-
-        t_idx += 1;
-    }
-
-    if q_idx == query_chars.len() {
-        let extra_chars = target_chars.len().saturating_sub(query_chars.len()) as i64;
-        Some(score - extra_chars)
-    } else {
-        None
-    }
-}
+pub use crate::ui::fuzzy::fuzzy_match;
 
 /// Checks if a pane matches the search query across command, cwd, title, or id.
 pub fn pane_matches(pane: &PaneInfo, query: &str) -> bool {

@@ -6,7 +6,7 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style::{Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{Clear, ClearType},
 };
 use std::io::{Write, stdout};
@@ -48,6 +48,7 @@ pub fn run_tea_timer() -> Result<(), String> {
 }
 
 fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
+    let theme = crate::ui::Theme::default();
     let mut out = stdout();
     execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0)).map_err(|e| e.to_string())?;
 
@@ -67,7 +68,7 @@ fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
     // Header: round info
     execute!(
         out,
-        SetForegroundColor(Color::Yellow),
+        SetForegroundColor(theme.warning),
         Print(format!("🍵 {}\r\n", timer.current_round().name)),
         ResetColor
     )
@@ -77,8 +78,8 @@ fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
     if timer.finished {
         execute!(
             out,
-            SetBackgroundColor(Color::Green),
-            SetForegroundColor(Color::Black),
+            SetBackgroundColor(theme.success),
+            SetForegroundColor(theme.bg),
             Print("  >>> TEA READY! ENJOY! <<<  "),
             ResetColor,
             Print("\r\n\r\n")
@@ -91,9 +92,9 @@ fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
             "[PAUSED]"
         };
         let status_color = if timer.is_running {
-            Color::Cyan
+            theme.info
         } else {
-            Color::DarkGrey
+            theme.muted
         };
 
         execute!(
@@ -101,7 +102,7 @@ fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
             SetForegroundColor(status_color),
             Print(format!("   {:02}:{:02}   {}\r\n", mins, secs, status)),
             ResetColor,
-            SetForegroundColor(Color::Green),
+            SetForegroundColor(theme.success),
             Print(format!("   [{bar}] {:>3}%\r\n\r\n", progress_pct)),
             ResetColor
         )
@@ -111,7 +112,7 @@ fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
     // Controls
     execute!(
         out,
-        SetForegroundColor(Color::DarkGrey),
+        SetForegroundColor(theme.muted),
         Print("[Space] Start/Pause   [n] Next   [p] Prev   [r] Reset   [+/-] Time   [q] Exit\r\n"),
         ResetColor
     )

@@ -1,0 +1,25 @@
+# Edge case 1: Path with spaces inside double quotes
+"/path with spaces/to/my file.txt:12:4"
+
+# Edge case 2: Path with spaces inside single quotes
+'src/deeply nested/config file.toml'
+
+# Edge case 3: Unicode Cyrillic paths and line numbers
+"/home/user/проекты/тест_скрипт.py:100:5"
+
+# Edge case 4: Unicode emoji and CJK characters
+"docs/🚀_release/日本語ドキュメント.md"
+
+# Edge case 5: Punctuation and brackets wrapping URL and file:line
+(see https://mox.rs/docs?query=test&id=1, or file: src/lib.rs:10).
+
+# Edge case 6: Overlapping URL, git clone, and git commit hash
+git@github.com:hackerman111/Mox.git commit 9f8e7d6c5b4a32101234567890abcdef12345678
+
+# Edge case 7: Trailing commas, semicolons, and colons
+Check endpoints: 10.0.0.1; 192.168.1.1:8080, and https://127.0.0.1/api.
+
+# Edge case 8: Long line with entity at the end
+padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding_padding /var/log/mox-daemon.log:250:1
+
+# Edge case 9: Empty line capture

@@ -210,6 +210,55 @@ pub fn flatten_tree<'a>(sessions: &'a [SessionInfo]) -> Vec<TreeItem<'a>> {
     items
 }
 
+/// Builds a borrowed visible tree. Search results retain their session/window
+/// ancestors and expand matching branches without copying the session model.
+pub fn visible_tree<'a>(sessions: &'a [SessionInfo], query: &str) -> Vec<TreeItem<'a>> {
+    let query = query.trim();
+    if query.is_empty() {
+        return flatten_tree(sessions);
+    }
+
+    let mut items = Vec::new();
+    let mut matching_panes = Vec::new();
+    for session in sessions {
+        let session_match = crate::ui::fuzzy::fuzzy_match(&session.name, query).is_some();
+        let session_start = items.len();
+        items.push(TreeItem::Session(session));
+
+        for window in &session.windows {
+            matching_panes.clear();
+            let window_match = crate::ui::fuzzy::fuzzy_match(&window.name, query).is_some();
+            matching_panes.extend(
+                window
+                    .panes
+                    .iter()
+                    .filter(|pane| crate::nav::fuzzy::pane_matches(pane, query)),
+            );
+
+            if !matching_panes.is_empty() {
+                items.push(TreeItem::Window { session, window });
+                items.extend(matching_panes.iter().map(|pane| TreeItem::Pane {
+                    session,
+                    window,
+                    pane,
+                }));
+            } else if window_match || session_match {
+                items.push(TreeItem::Window { session, window });
+                items.extend(window.panes.iter().map(|pane| TreeItem::Pane {
+                    session,
+                    window,
+                    pane,
+                }));
+            }
+        }
+
+        if items.len() == session_start + 1 && !session_match {
+            items.pop();
+        }
+    }
+    items
+}
+
 /// Fetches the current tmux snapshot in a single CLI command.
 pub fn fetch_tmux_snapshot(socket: Option<&str>) -> Result<Vec<SessionInfo>, String> {
     let format = "#{session_name}\t#{session_id}\t#{session_attached}\t#{window_index}\t#{window_id}\t#{window_name}\t#{window_active}\t#{pane_id}\t#{pane_index}\t#{pane_active}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_title}\t#{@mox_is_agent}";

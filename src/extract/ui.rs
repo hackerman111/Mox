@@ -3,8 +3,11 @@
 //! Provides a categorized fuzzy search picker inside a tmux popup,
 //! enabling quick yanking, shell insertion, or opening in `$EDITOR` or browser.
 
-use std::collections::HashSet;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use std::io::{Write, stdout};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crossterm::{
     cursor,
@@ -18,15 +21,30 @@ use crate::extract::model::{EntityKind, ExtractedToken};
 use crate::extract::scanner::scan_lines;
 use crate::tmux::{execute_tmux, execute_tmux_raw};
 use crate::tui::TuiGuard;
+use crate::ui::picker::PickerState;
+use crate::ui::preview::{Preview, PreviewWorker};
+use crate::ui::render::{
+    ListRow, PreviewPanel, draw_divider, render_empty_state, render_hints, render_list_row,
+    render_preview_panel, truncate_str,
+};
+use crate::ui::theme::Theme;
 
 /// The ordered list of categories cycled via Tab and BackTab.
-const CATEGORIES: [Option<EntityKind>; 6] = [
+const CATEGORIES: [Option<EntityKind>; 14] = [
     None,
     Some(EntityKind::Path),
     Some(EntityKind::Url),
     Some(EntityKind::Hash),
     Some(EntityKind::Ip),
     Some(EntityKind::Command),
+    Some(EntityKind::Uuid),
+    Some(EntityKind::Quoted),
+    Some(EntityKind::Number),
+    Some(EntityKind::DockerImage),
+    Some(EntityKind::KubernetesResource),
+    Some(EntityKind::HexColor),
+    Some(EntityKind::IpfsCid),
+    Some(EntityKind::Word),
 ];
 
 /// The interaction mode of the extract picker.
@@ -52,6 +70,7 @@ pub struct ExtractState {
     pub current_category: Option<EntityKind>,
     /// Active interaction mode (Search or Normal).
     pub mode: PickerMode,
+    picker: PickerState,
 }
 
 impl ExtractState {
@@ -64,12 +83,13 @@ impl ExtractState {
             selected_index: 0,
             current_category: None,
             mode: PickerMode::Normal,
+            picker: PickerState::default(),
         };
         state.apply_filter();
         state
     }
 
-    /// Cycles the active category filter forward (`All -> Path -> Url -> Hash -> Ip -> Command -> All`).
+    /// Cycles the active category filter, retaining the original category order first.
     pub fn cycle_category_forward(&mut self) {
         let current_pos = CATEGORIES
             .iter()
@@ -97,60 +117,30 @@ impl ExtractState {
 
     /// Filters and ranks tokens based on the active query and category.
     pub fn apply_filter(&mut self) {
-        let q = self.query.trim();
-        if q.is_empty() {
-            self.filtered_indices = (0..self.tokens.len())
-                .filter(|&i| {
-                    if let Some(cat) = self.current_category {
-                        self.tokens[i].kind == cat
-                    } else {
-                        true
-                    }
-                })
-                .collect();
-        } else {
-            let mut matches: Vec<(usize, i64)> = Vec::new();
-            for (i, token) in self.tokens.iter().enumerate() {
-                if let Some(cat) = self.current_category
-                    && token.kind != cat
-                {
-                    continue;
-                }
-                let score_clean = crate::nav::fuzzy::fuzzy_match(&token.clean_text, q);
-                let score_raw = crate::nav::fuzzy::fuzzy_match(&token.raw_text, q);
-                let best = match (score_clean, score_raw) {
-                    (Some(s1), Some(s2)) => Some(s1.max(s2)),
-                    (Some(s1), None) => Some(s1),
-                    (None, Some(s2)) => Some(s2),
-                    (None, None) => None,
-                };
-                if let Some(score) = best {
-                    matches.push((i, score));
-                }
-            }
-            matches.sort_by_key(|b| std::cmp::Reverse(b.1));
-            self.filtered_indices = matches.into_iter().map(|(i, _)| i).collect();
-        }
-
-        if self.filtered_indices.is_empty() {
-            self.selected_index = 0;
-        } else if self.selected_index >= self.filtered_indices.len() {
-            self.selected_index = self.filtered_indices.len() - 1;
-        }
+        self.picker.query.clone_from(&self.query);
+        self.picker.selected = self.selected_index;
+        self.picker
+            .filter(self.tokens.iter().enumerate().filter_map(|(i, token)| {
+                (self.current_category.is_none_or(|kind| kind == token.kind))
+                    .then_some((i, token.raw_text.as_str()))
+            }));
+        self.filtered_indices.clone_from(&self.picker.indices);
+        self.selected_index = self.picker.selected;
     }
 
     /// Moves selection up by one item.
     pub fn move_selection_up(&mut self) {
-        self.selected_index = self.selected_index.saturating_sub(1);
+        self.picker.selected = self.selected_index;
+        self.picker.selected = self.picker.selected.saturating_sub(1);
+        self.selected_index = self.picker.selected;
     }
 
     /// Moves selection down by one item.
     pub fn move_selection_down(&mut self) {
-        if !self.filtered_indices.is_empty()
-            && self.selected_index + 1 < self.filtered_indices.len()
-        {
-            self.selected_index += 1;
-        }
+        self.picker.selected = self.selected_index;
+        self.picker.selected =
+            (self.picker.selected + 1).min(self.filtered_indices.len().saturating_sub(1));
+        self.selected_index = self.picker.selected;
     }
 
     /// Returns a reference to the currently selected token, if any.
@@ -172,9 +162,14 @@ pub fn launch_extract_popup(socket: Option<&str>, lines: usize) -> std::io::Resu
         .trim()
         .to_string();
 
-    let mut cmd = format!("'{bin_path}' extract --lines {lines} --target-pane '{target_pane}'");
+    let lines = lines.min(200_000);
+    let mut cmd = format!(
+        "{} extract --lines {lines} --target-pane {}",
+        crate::tmux::shell_quote(&bin_path),
+        crate::tmux::shell_quote(&target_pane)
+    );
     if let Some(sock) = socket {
-        cmd.push_str(&format!(" --socket '{sock}'"));
+        cmd.push_str(&format!(" --socket {}", crate::tmux::shell_quote(sock)));
     }
 
     let popup_args = ["display-popup", "-E", "-w", "75%", "-h", "65%", &cmd];
@@ -190,6 +185,7 @@ pub fn run_extract_picker(
     lines: usize,
     target_pane: Option<&str>,
 ) -> std::io::Result<()> {
+    let lines = lines.min(200_000);
     let active_pane_id = if let Some(tp) = target_pane {
         tp.trim().to_string()
     } else {
@@ -226,21 +222,70 @@ pub fn run_extract_picker(
         }
     }
 
+    // Preserve established entity navigation when plain words are also available.
+    deduped.sort_by_key(|token| token.kind == EntityKind::Word);
     let mut state = ExtractState::new(deduped);
     let _guard = TuiGuard::enter()?;
 
     let mut out = stdout();
     let mut pending_g = false;
     let mut scroll_offset = 0;
+    let mut status = None::<String>;
+    let worker = PreviewWorker::new(socket);
+    let mut preview_source = None::<Preview>;
+    let mut preview_token_index = None;
+    let mut preview_generation = 0u64;
+    let mut preview_requested = false;
+    let mut preview_lines = Vec::new();
+    let mut pane_cwds = HashMap::<String, Result<PathBuf, String>>::new();
 
     loop {
+        let selected_token_index = state.filtered_indices.get(state.selected_index).copied();
+        if selected_token_index != preview_token_index {
+            preview_token_index = selected_token_index;
+            preview_generation = preview_generation.wrapping_add(1);
+            preview_lines.clear();
+            if selected_token_index.is_some() {
+                preview_lines.push("Loading preview…".into());
+            }
+            preview_requested = false;
+            preview_source = selected_token_index.map(|index| {
+                match preview_for_token(
+                    socket,
+                    &state.tokens[index],
+                    &captured_lines,
+                    &mut pane_cwds,
+                ) {
+                    Ok(preview) => preview,
+                    Err(error) => Preview::Text(format!("Preview unavailable: {error}")),
+                }
+            });
+        }
+        if !preview_requested && let Some(source) = &preview_source {
+            preview_requested = worker.request(preview_generation, source);
+        }
+        if let Some(lines) = worker.result(preview_generation) {
+            preview_lines = lines;
+        }
+
         let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
         let term_w = term_w as usize;
         let term_h = term_h as usize;
 
-        render_extract_ui(&state, pending_g, scroll_offset, term_w, term_h, &mut out)?;
+        render_extract_ui(
+            &state,
+            pending_g,
+            scroll_offset,
+            term_w,
+            term_h,
+            status.as_deref(),
+            &preview_lines,
+            &mut out,
+        )?;
 
-        if let Event::Key(key_event) = event::read()? {
+        if event::poll(Duration::from_millis(50))?
+            && let Event::Key(key_event) = event::read()?
+        {
             if key_event.kind != KeyEventKind::Press {
                 continue;
             }
@@ -262,14 +307,18 @@ pub fn run_extract_picker(
                 match key_event.code {
                     KeyCode::Char('f') | KeyCode::Char('o') => {
                         if let Some(tok) = state.selected_token() {
-                            open_in_editor(socket, &tok.clean_text, tok.line_number);
-                            break;
+                            match open_in_editor(socket, tok) {
+                                Ok(()) => break,
+                                Err(error) => status = Some(error),
+                            }
                         }
                     }
                     KeyCode::Char('x') => {
                         if let Some(tok) = state.selected_token() {
-                            open_in_browser(&tok.clean_text);
-                            break;
+                            match open_in_browser(&tok.clean_text) {
+                                Ok(()) => break,
+                                Err(error) => status = Some(error),
+                            }
                         }
                     }
                     _ => {}
@@ -287,8 +336,10 @@ pub fn run_extract_picker(
                         || key_event.modifiers.contains(KeyModifiers::ALT) =>
                 {
                     if let Some(tok) = state.selected_token() {
-                        crate::flash::ui::copy_to_clipboard_and_tmux(socket, &tok.clean_text);
-                        break;
+                        match crate::clipboard::copy(socket, &tok.clean_text) {
+                            Ok(()) => break,
+                            Err(error) => status = Some(error),
+                        }
                     }
                 }
                 KeyCode::Char('o')
@@ -296,8 +347,10 @@ pub fn run_extract_picker(
                         || key_event.modifiers.contains(KeyModifiers::ALT) =>
                 {
                     if let Some(tok) = state.selected_token() {
-                        open_in_editor(socket, &tok.clean_text, tok.line_number);
-                        break;
+                        match open_in_editor(socket, tok) {
+                            Ok(()) => break,
+                            Err(error) => status = Some(error),
+                        }
                     }
                 }
                 KeyCode::Char('x')
@@ -305,8 +358,10 @@ pub fn run_extract_picker(
                         || key_event.modifiers.contains(KeyModifiers::ALT) =>
                 {
                     if let Some(tok) = state.selected_token() {
-                        open_in_browser(&tok.clean_text);
-                        break;
+                        match open_in_browser(&tok.clean_text) {
+                            Ok(()) => break,
+                            Err(error) => status = Some(error),
+                        }
                     }
                 }
                 KeyCode::Enter => {
@@ -351,19 +406,19 @@ pub fn run_extract_picker(
                 }
                 KeyCode::Up if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     state.move_selection_up();
-                    adjust_scroll(&state, &mut scroll_offset, term_h);
+                    adjust_scroll(&mut state, &mut scroll_offset, term_h);
                 }
                 KeyCode::Down if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     state.move_selection_down();
-                    adjust_scroll(&state, &mut scroll_offset, term_h);
+                    adjust_scroll(&mut state, &mut scroll_offset, term_h);
                 }
                 KeyCode::Char('p') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     state.move_selection_up();
-                    adjust_scroll(&state, &mut scroll_offset, term_h);
+                    adjust_scroll(&mut state, &mut scroll_offset, term_h);
                 }
                 KeyCode::Char('n') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                     state.move_selection_down();
-                    adjust_scroll(&state, &mut scroll_offset, term_h);
+                    adjust_scroll(&mut state, &mut scroll_offset, term_h);
                 }
                 _ => {
                     // Mode-specific input handling:
@@ -378,21 +433,21 @@ pub fn run_extract_picker(
                             }
                             KeyCode::Up => {
                                 state.move_selection_up();
-                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                                adjust_scroll(&mut state, &mut scroll_offset, term_h);
                             }
                             KeyCode::Down => {
                                 state.move_selection_down();
-                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                                adjust_scroll(&mut state, &mut scroll_offset, term_h);
                             }
                             KeyCode::Backspace => {
                                 state.query.pop();
                                 state.apply_filter();
-                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                                adjust_scroll(&mut state, &mut scroll_offset, term_h);
                             }
                             KeyCode::Char(c) => {
                                 state.query.push(c);
                                 state.apply_filter();
-                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                                adjust_scroll(&mut state, &mut scroll_offset, term_h);
                             }
                             _ => {}
                         },
@@ -402,20 +457,19 @@ pub fn run_extract_picker(
                             }
                             KeyCode::Char('y') => {
                                 if let Some(tok) = state.selected_token() {
-                                    crate::flash::ui::copy_to_clipboard_and_tmux(
-                                        socket,
-                                        &tok.clean_text,
-                                    );
-                                    break;
+                                    match crate::clipboard::copy(socket, &tok.clean_text) {
+                                        Ok(()) => break,
+                                        Err(error) => status = Some(error),
+                                    }
                                 }
                             }
                             KeyCode::Char('j') | KeyCode::Down => {
                                 state.move_selection_down();
-                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                                adjust_scroll(&mut state, &mut scroll_offset, term_h);
                             }
                             KeyCode::Char('k') | KeyCode::Up => {
                                 state.move_selection_up();
-                                adjust_scroll(&state, &mut scroll_offset, term_h);
+                                adjust_scroll(&mut state, &mut scroll_offset, term_h);
                             }
                             KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Char('/') => {
                                 state.mode = PickerMode::Search;
@@ -425,14 +479,18 @@ pub fn run_extract_picker(
                             }
                             KeyCode::Char('o') => {
                                 if let Some(tok) = state.selected_token() {
-                                    open_in_editor(socket, &tok.clean_text, tok.line_number);
-                                    break;
+                                    match open_in_editor(socket, tok) {
+                                        Ok(()) => break,
+                                        Err(error) => status = Some(error),
+                                    }
                                 }
                             }
                             KeyCode::Char('x') => {
                                 if let Some(tok) = state.selected_token() {
-                                    open_in_browser(&tok.clean_text);
-                                    break;
+                                    match open_in_browser(&tok.clean_text) {
+                                        Ok(()) => break,
+                                        Err(error) => status = Some(error),
+                                    }
                                 }
                             }
                             _ => {}
@@ -447,41 +505,38 @@ pub fn run_extract_picker(
 }
 
 /// Adjusts window scroll offset to keep selected index within visible viewport.
-fn adjust_scroll(state: &ExtractState, scroll_offset: &mut usize, term_h: usize) {
+fn adjust_scroll(state: &mut ExtractState, scroll_offset: &mut usize, term_h: usize) {
     let content_height = term_h.saturating_sub(4).max(1);
-    if state.selected_index < *scroll_offset {
-        *scroll_offset = state.selected_index;
-    } else if state.selected_index >= *scroll_offset + content_height {
-        *scroll_offset = state.selected_index + 1 - content_height;
-    }
+    state.picker.selected = state.selected_index;
+    state.picker.offset = *scroll_offset;
+    state
+        .picker
+        .viewport(state.filtered_indices.len(), content_height);
+    *scroll_offset = state.picker.offset;
 }
 
 /// Renders the extract picker interface.
+// Keep the render inputs explicit; this is the single Extract view renderer.
+#[allow(clippy::too_many_arguments)]
 fn render_extract_ui(
     state: &ExtractState,
     pending_g: bool,
     scroll_offset: usize,
     width: usize,
     height: usize,
+    status: Option<&str>,
+    preview_lines: &[String],
     out: &mut std::io::Stdout,
 ) -> std::io::Result<()> {
-    let bg = Color::Rgb {
-        r: 46,
-        g: 52,
-        b: 64,
-    };
-    let fg = Color::Rgb {
-        r: 236,
-        g: 239,
-        b: 244,
-    };
-
+    let split = width >= 100;
+    let list_width = if split { width / 2 } else { width };
+    let theme = Theme::nord();
     execute!(
         out,
         cursor::MoveTo(0, 0),
         Clear(ClearType::All),
-        SetBackgroundColor(bg),
-        SetForegroundColor(fg),
+        SetBackgroundColor(theme.bg),
+        SetForegroundColor(theme.fg),
     )?;
 
     // 1. Header (> query [N matches] [MODE])
@@ -499,327 +554,269 @@ fn render_extract_ui(
         "> {} [{} matches] {} {}",
         state.query, total_matches, mode_str, g_indicator
     );
-    let header_line = truncate_str(&header_text, width);
+    let header_line = truncate_str(&header_text, list_width);
     execute!(
         out,
         cursor::MoveTo(0, 0),
-        SetForegroundColor(Color::Rgb {
-            r: 136,
-            g: 192,
-            b: 208
-        }),
+        SetForegroundColor(theme.accent),
         Print(&header_line),
         ResetColor,
     )?;
 
     // 2. Category tabs
     execute!(out, cursor::MoveTo(0, 1))?;
-    let tabs = [
-        ("All", None),
-        ("Path", Some(EntityKind::Path)),
-        ("Url", Some(EntityKind::Url)),
-        ("Hash", Some(EntityKind::Hash)),
-        ("IP", Some(EntityKind::Ip)),
-        ("Command", Some(EntityKind::Command)),
-    ];
+    execute!(out, SetForegroundColor(theme.fg), Print("Tabs: "),)?;
 
-    execute!(
-        out,
-        SetForegroundColor(Color::Rgb {
-            r: 216,
-            g: 222,
-            b: 233
-        }),
-        Print("Tabs: "),
-    )?;
-
-    for (name, cat) in &tabs {
-        let is_active = state.current_category == *cat;
+    let mut tabs_width = "Tabs: ".len();
+    for cat in CATEGORIES {
+        let name = cat.map_or("All", category_name);
+        let is_active = state.current_category == cat;
+        let tab = if is_active {
+            format!(" [{name}] ")
+        } else {
+            format!(" {name}  ")
+        };
+        let tab_width = tab.chars().count();
+        if tabs_width + tab_width > list_width {
+            break;
+        }
+        tabs_width += tab_width;
         if is_active {
             execute!(
                 out,
-                SetBackgroundColor(Color::Rgb {
-                    r: 136,
-                    g: 192,
-                    b: 208
-                }),
-                SetForegroundColor(Color::Rgb {
-                    r: 46,
-                    g: 52,
-                    b: 64
-                }),
-                Print(format!(" [{name}] ")),
-                SetBackgroundColor(bg),
-                SetForegroundColor(fg),
+                SetBackgroundColor(theme.accent),
+                SetForegroundColor(theme.bg),
+                Print(&tab),
+                SetBackgroundColor(theme.bg),
+                SetForegroundColor(theme.fg),
                 Print(" "),
             )?;
         } else {
-            execute!(
-                out,
-                SetForegroundColor(Color::Rgb {
-                    r: 216,
-                    g: 222,
-                    b: 233
-                }),
-                Print(format!(" {name}  ")),
-            )?;
+            execute!(out, SetForegroundColor(theme.fg), Print(&tab),)?;
         }
     }
 
     // 3. Separator line
-    let sep = "─".repeat(width);
-    execute!(
-        out,
-        cursor::MoveTo(0, 2),
-        SetForegroundColor(Color::Rgb {
-            r: 76,
-            g: 86,
-            b: 106
-        }),
-        Print(&sep),
-        ResetColor,
-    )?;
+    execute!(out, cursor::MoveTo(0, 2))?;
+    draw_divider(out, list_width, &theme)?;
 
     // 4. List items
     let content_height = height.saturating_sub(4).max(1);
-    let end_idx = state
-        .filtered_indices
-        .len()
-        .min(scroll_offset + content_height);
-    let visible_indices = if scroll_offset < state.filtered_indices.len() {
-        &state.filtered_indices[scroll_offset..end_idx]
+    if state.filtered_indices.is_empty() {
+        execute!(out, cursor::MoveTo(0, 3))?;
+        render_empty_state(out, "no matching entities", list_width, &theme)?;
     } else {
-        &[][..]
-    };
-
-    for (row_offset, &token_idx) in visible_indices.iter().enumerate() {
-        let row = 3 + row_offset;
-        let is_selected = scroll_offset + row_offset == state.selected_index;
-        let token = &state.tokens[token_idx];
-
-        execute!(out, cursor::MoveTo(0, row as u16))?;
-
-        if is_selected {
-            execute!(
-                out,
-                SetBackgroundColor(Color::Rgb {
-                    r: 59,
-                    g: 66,
-                    b: 82
-                }),
-                SetForegroundColor(Color::Rgb {
-                    r: 235,
-                    g: 203,
-                    b: 139
-                }),
-                Print("> "),
-            )?;
+        let end_idx = state
+            .filtered_indices
+            .len()
+            .min(scroll_offset + content_height);
+        let visible_indices = if scroll_offset < state.filtered_indices.len() {
+            &state.filtered_indices[scroll_offset..end_idx]
         } else {
-            execute!(
-                out,
-                SetBackgroundColor(bg),
-                SetForegroundColor(Color::Rgb {
-                    r: 76,
-                    g: 86,
-                    b: 106
-                }),
-                Print("  "),
-            )?;
-        }
+            &[][..]
+        };
 
-        let (badge, badge_color) = badge_for_kind(token.kind);
-        execute!(
+        for (row_offset, &token_idx) in visible_indices.iter().enumerate() {
+            let row = 3 + row_offset;
+            let is_selected = scroll_offset + row_offset == state.selected_index;
+            let token = &state.tokens[token_idx];
+
+            execute!(out, cursor::MoveTo(0, row as u16))?;
+
+            let (badge, badge_color) = badge_for_kind(token.kind, &theme);
+            let display_text = token.line_number.map_or_else(
+                || Cow::Borrowed(token.clean_text.as_str()),
+                |line| Cow::Owned(format!("{}:{line}", token.clean_text)),
+            );
+
+            let list_row = ListRow {
+                prefix: if is_selected { "> " } else { "  " },
+                badge: Some((badge, badge_color)),
+                text: &display_text,
+                is_selected,
+            };
+
+            render_list_row(out, &list_row, list_width, &theme)?;
+        }
+    }
+
+    if split {
+        render_preview_panel(
             out,
-            SetForegroundColor(badge_color),
-            Print(badge),
-            Print(" "),
+            &PreviewPanel {
+                title: "Preview",
+                lines: preview_lines,
+                x: list_width,
+                y: 1,
+                width: width - list_width,
+                height: height.saturating_sub(2),
+            },
+            &theme,
         )?;
-
-        let mut display_text = token.clean_text.clone();
-        if let Some(l) = token.line_number {
-            display_text.push_str(&format!(":{l}"));
-        }
-
-        let max_text_width = width.saturating_sub(12);
-        let truncated = truncate_str(&display_text, max_text_width);
-
-        if is_selected {
-            execute!(
-                out,
-                SetForegroundColor(Color::Rgb {
-                    r: 236,
-                    g: 239,
-                    b: 244
-                }),
-                Print(&truncated),
-                ResetColor,
-            )?;
-        } else {
-            execute!(
-                out,
-                SetForegroundColor(Color::Rgb {
-                    r: 216,
-                    g: 222,
-                    b: 233
-                }),
-                Print(&truncated),
-                ResetColor,
-            )?;
-        }
     }
 
     // 5. Footer actions
     let footer_row = height.saturating_sub(1) as u16;
-    let footer_text = match state.mode {
-        PickerMode::Search => "<Enter> Paste | <C-y> Copy | <Esc> Normal | <Tab> Tab | <C-c> Quit",
-        PickerMode::Normal => {
-            "<Enter> Paste | <y> Copy | <o/gf> Edit | <gx> Web | <i> Search | <q/Esc> Quit"
+    let footer_text = if let Some(status) = status {
+        status
+    } else {
+        match state.mode {
+            PickerMode::Search => {
+                "<Enter> Paste | <C-y> Copy | <Esc> Normal | <Tab> Tab | <C-c> Quit"
+            }
+            PickerMode::Normal => {
+                "<Enter> Paste | <y> Copy | <o/gf> Edit | <gx> Web | <i> Search | <q/Esc> Quit"
+            }
         }
     };
-    let truncated_footer = truncate_str(footer_text, width.saturating_sub(1));
-    execute!(
-        out,
-        cursor::MoveTo(0, footer_row),
-        SetBackgroundColor(Color::Rgb {
-            r: 59,
-            g: 66,
-            b: 82
-        }),
-        SetForegroundColor(Color::Rgb {
-            r: 216,
-            g: 222,
-            b: 233
-        }),
-        Print(&truncated_footer),
-        ResetColor,
-    )?;
+    execute!(out, cursor::MoveTo(0, footer_row))?;
+    render_hints(out, footer_text, width, &theme)?;
 
     out.flush()?;
     Ok(())
 }
 
-/// Returns the badge text and accent color for an entity kind.
-fn badge_for_kind(kind: EntityKind) -> (&'static str, Color) {
+fn category_name(kind: EntityKind) -> &'static str {
     match kind {
-        EntityKind::Path => (
-            "[PATH]",
-            Color::Rgb {
-                r: 136,
-                g: 192,
-                b: 208,
-            },
-        ),
-        EntityKind::Url => (
-            "[URL ]",
-            Color::Rgb {
-                r: 163,
-                g: 190,
-                b: 140,
-            },
-        ),
-        EntityKind::Hash => (
-            "[HASH]",
-            Color::Rgb {
-                r: 235,
-                g: 203,
-                b: 139,
-            },
-        ),
-        EntityKind::Ip => (
-            "[IP  ]",
-            Color::Rgb {
-                r: 180,
-                g: 142,
-                b: 173,
-            },
-        ),
-        EntityKind::Command => (
-            "[CMD ]",
-            Color::Rgb {
-                r: 208,
-                g: 135,
-                b: 112,
-            },
-        ),
-        EntityKind::Uuid => (
-            "[UUID]",
-            Color::Rgb {
-                r: 129,
-                g: 161,
-                b: 193,
-            },
-        ),
-        EntityKind::Quoted => (
-            "[STR ]",
-            Color::Rgb {
-                r: 229,
-                g: 233,
-                b: 240,
-            },
-        ),
-        EntityKind::Number => (
-            "[NUM ]",
-            Color::Rgb {
-                r: 216,
-                g: 222,
-                b: 233,
-            },
-        ),
+        EntityKind::Path => "Path",
+        EntityKind::Url => "Url",
+        EntityKind::Hash => "Hash",
+        EntityKind::Ip => "IP",
+        EntityKind::Command => "Command",
+        EntityKind::Uuid => "UUID",
+        EntityKind::Quoted => "String",
+        EntityKind::Number => "Number",
+        EntityKind::Word => "Word",
+        EntityKind::DockerImage => "Docker",
+        EntityKind::KubernetesResource => "K8s",
+        EntityKind::HexColor => "Color",
+        EntityKind::IpfsCid => "IPFS",
     }
 }
 
-/// Truncates string to at most `max_len` characters, appending ellipsis if truncated.
-fn truncate_str(s: &str, max_len: usize) -> String {
-    if max_len == 0 {
-        return String::new();
+/// Returns the badge text and accent color for an entity kind.
+fn badge_for_kind(kind: EntityKind, theme: &Theme) -> (&'static str, Color) {
+    match kind {
+        EntityKind::Path => ("[PATH]", theme.badge_path),
+        EntityKind::Url => ("[URL ]", theme.badge_url),
+        EntityKind::Hash => ("[HASH]", theme.badge_hash),
+        EntityKind::Ip => ("[IP  ]", theme.badge_ip),
+        EntityKind::Command => ("[CMD ]", theme.badge_command),
+        EntityKind::Uuid => ("[UUID]", theme.info),
+        EntityKind::Quoted => ("[STR ]", theme.fg),
+        EntityKind::Number => ("[NUM ]", theme.muted),
+        EntityKind::Word => ("[WORD]", theme.badge_word),
+        EntityKind::DockerImage => ("[IMG ]", theme.badge_docker),
+        EntityKind::KubernetesResource => ("[K8S ]", theme.badge_k8s),
+        EntityKind::HexColor => ("[HEX ]", theme.badge_color),
+        EntityKind::IpfsCid => ("[CID ]", theme.badge_ipfs),
     }
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= max_len {
-        s.to_string()
-    } else if max_len > 1 {
-        let mut truncated: String = chars[..max_len - 1].iter().collect();
-        truncated.push('…');
-        truncated
+}
+
+fn preview_for_token(
+    socket: Option<&str>,
+    token: &ExtractedToken,
+    captured_lines: &[String],
+    pane_cwds: &mut HashMap<String, Result<PathBuf, String>>,
+) -> Result<Preview, String> {
+    if token.kind != EntityKind::Path {
+        return Ok(Preview::Text(text_context(
+            captured_lines,
+            token.screen_row,
+        )));
+    }
+
+    let location = crate::editor::Location {
+        path: token.clean_text.clone().into(),
+        line: token.line_number,
+        column: token.col_number,
+    };
+    if location.path.is_absolute() {
+        return Ok(Preview::File(location.path));
+    }
+
+    let cwd = pane_cwds
+        .entry(token.pane_id.clone())
+        .or_insert_with(|| {
+            execute_tmux(
+                socket,
+                &[
+                    "display-message",
+                    "-p",
+                    "-t",
+                    &token.pane_id,
+                    "#{pane_current_path}",
+                ],
+            )
+            .map(PathBuf::from)
+        })
+        .as_ref()
+        .map_err(Clone::clone)?;
+    Ok(Preview::File(resolve_location_path(location, cwd)))
+}
+
+fn resolve_location_path(location: crate::editor::Location, cwd: &Path) -> PathBuf {
+    if location.path.is_absolute() {
+        location.path
     } else {
-        chars[..max_len].iter().collect()
+        cwd.join(location.path)
     }
+}
+
+fn text_context(lines: &[String], screen_row: usize) -> String {
+    if lines.is_empty() {
+        return "No source context available".into();
+    }
+    let first = screen_row.saturating_sub(2);
+    let end = screen_row.saturating_add(3).min(lines.len());
+    let mut context = String::new();
+    for (row, line) in lines.iter().enumerate().take(end).skip(first) {
+        let marker = if row == screen_row { '▶' } else { ' ' };
+        context.push_str(&format!("{:>5} {marker} {line}\n", row + 1));
+    }
+    context
 }
 
 /// Opens a filesystem path in `$EDITOR` or `$VISUAL`.
-pub fn open_in_editor(socket: Option<&str>, path: &str, line: Option<usize>) {
-    let editor = std::env::var("EDITOR")
-        .or_else(|_| std::env::var("VISUAL"))
-        .unwrap_or_else(|_| "nvim".to_string());
-    let cmd = if let Some(l) = line {
-        format!("{editor} +{l} {path}")
-    } else {
-        format!("{editor} {path}")
+pub fn open_in_editor(socket: Option<&str>, token: &ExtractedToken) -> Result<(), String> {
+    let location = crate::editor::Location {
+        path: token.clean_text.clone().into(),
+        line: token.line_number,
+        column: token.col_number,
     };
-
-    if execute_tmux(socket, &["new-window", "-n", "editor", &cmd]).is_err() {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(path)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn();
-    }
+    crate::editor::open(socket, Some(&token.pane_id), location)
 }
 
 /// Opens a URL in the default browser.
-pub fn open_in_browser(url: &str) {
-    let _ = std::process::Command::new("xdg-open")
-        .arg(url)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .or_else(|_| {
-            std::process::Command::new("open")
-                .arg(url)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-        });
+pub fn open_in_browser(url: &str) -> Result<(), String> {
+    crate::clipboard::open_url(url)
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::{resolve_location_path, text_context};
+    use crate::editor::Location;
+    use std::path::PathBuf;
+
+    #[test]
+    fn relative_preview_path_uses_source_pane_cwd() {
+        let location = Location {
+            path: PathBuf::from("src/main.rs"),
+            line: Some(12),
+            column: Some(4),
+        };
+        assert_eq!(
+            resolve_location_path(location, &PathBuf::from("/work/project")),
+            PathBuf::from("/work/project/src/main.rs")
+        );
+    }
+
+    #[test]
+    fn non_path_preview_marks_selected_capture_context() {
+        let lines = vec!["before".into(), "selected URL".into(), "after".into()];
+        let context = text_context(&lines, 1);
+        assert!(context.contains("1   before"));
+        assert!(context.contains("2 ▶ selected URL"));
+        assert!(context.contains("3   after"));
+    }
 }

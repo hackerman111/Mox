@@ -10,22 +10,6 @@ For performance-sensitive code, runtime and memory efficiency are first-class re
 
 Do not sacrifice readability for hypothetical performance.
 
-## Multi-Agent Workflow
-
-For non-trivial implementation, refactoring, bug fixing, performance work, concurrency changes, or unsafe code, use the role-separated workflow in `.agent/MULTI_AGENT.md`.
-
-Roles:
-
-- Orchestrator: `.agent/roles/ORCHESTRATOR.md`
-- Planner: `.agent/roles/PLANNER.md`
-- Implementer: `.agent/roles/IMPLEMENTER.md`
-- Reviewer: `.agent/roles/REVIEWER.md`
-- Fixer: `.agent/roles/FIXER.md`
-
-The shared rules in this file and `.agent/*.md` remain authoritative for every role. Role files add responsibilities; they do not replace engineering, performance, architecture, concurrency, benchmarking, or unsafe rules.
-
-Performance discoveries and optimization ideas must survive every handoff through the Task Packet's `PERFORMANCE CONTRACT`. Do not silently discard an optimization idea; validate it, reject it with evidence, defer it with a reason, or keep it explicitly as a candidate.
-
 ## Before Changing Code
 
 Before making a non-trivial change:

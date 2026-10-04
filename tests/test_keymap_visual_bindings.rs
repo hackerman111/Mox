@@ -67,8 +67,14 @@ fn interactive_bindings_release_the_tmux_queue_and_show_visual_status() {
         .iter()
         .find(|s| s.starts_with("set -g status-left "))
         .unwrap();
-    assert!(status.contains("selection_present,VISUAL,COPY"));
-    assert!(status.contains("◈"));
+    assert!(status.contains("#{E:@mox_indicator}"));
+    let indicator = script
+        .iter()
+        .find(|line| line.starts_with("set -g @mox_indicator "))
+        .unwrap();
+    assert!(indicator.contains("selection_present"));
+    assert!(indicator.contains("◈ VISUAL"));
+    assert!(indicator.contains("COPY"));
     let base = status
         .strip_prefix("set -g status-left \"")
         .unwrap()

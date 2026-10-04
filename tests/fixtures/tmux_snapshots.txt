@@ -1,0 +1,7 @@
+dev	$0	1	0	@0	editor	1	%0	0	1	nvim	/home/user/Rust_project/moch	main.rs	0
+dev	$0	1	0	@0	editor	1	%1	1	0	bash	/home/user/Rust_project/moch	terminal	0
+dev	$0	1	1	@1	agent	0	%2	0	1	claude	/home/user/Rust_project/moch	agent-pane	1
+dev	$0	1	2	@2	build	0	%3	0	1	cargo	/home/user/Rust_project/moch	cargo test	0
+ops	$1	0	0	@3	k8s	1	%4	0	1	k9s	/home/user	cluster-overview	0
+ops	$1	0	1	@4	logs	0	%5	0	1	tail	/var/log	syslog	0
+docs	$2	0	0	@5	notes	1	%6	0	1	glow	/home/user/notes	index.md	0

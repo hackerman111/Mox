@@ -1,6 +1,7 @@
 //! Canonical default keymap definitions for `moch`.
 
 use super::types::{KeyAction, KeyNode};
+use clap::ValueEnum;
 
 /// Builds the canonical default keymap for `moch`.
 pub fn build_default_keymap() -> KeyNode {
@@ -429,6 +430,18 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action("q", "insert mode", KeyAction::ExitModal),
         KeyNode::new_action("M-m", "insert mode", KeyAction::ExitModal),
     ];
+
+    let feature_children = crate::actions::FeatureAction::value_variants()
+        .iter()
+        .enumerate()
+        .map(|(index, action)| {
+            let key = [
+                "p", "o", "f", "g", "/", "l", "s", "r", "a", "z", "v", "h", "c", "u",
+            ][index];
+            KeyNode::new_action(key, action.label(), KeyAction::Feature(*action))
+        })
+        .collect();
+    root_children.push(KeyNode::new_branch("p", "Mox features", feature_children));
 
     // Numbers 0..9 for direct window jumping in normal mode
     for i in 0..=9 {

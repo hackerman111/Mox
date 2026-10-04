@@ -3,12 +3,16 @@
 /// The action to be executed when a leaf key in the keymap is pressed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyAction {
+    Feature(crate::actions::FeatureAction),
     /// A raw tmux command string (e.g. `select-pane -L`).
     Tmux(String),
     /// Switch to a designated tmux key-table (e.g. "mox_r", "mox_w", "mox").
     SwitchTable(String),
     /// Dangerous operation requiring user confirmation before execution.
-    Confirm { prompt: String, command: String },
+    Confirm {
+        prompt: String,
+        command: String,
+    },
     /// Enter tmux copy/scroll mode with Vim navigation.
     CopyMode,
     /// Interactive Flash overlay, also dispatched from which-key menus.
