@@ -213,3 +213,104 @@ fn test_tmux_navigator_switch_and_actions_integration() {
     assert_eq!(fresh_first_win.panes.len(), 1);
     assert_eq!(fresh_first_win.panes[0].id, first_pane.id);
 }
+
+#[test]
+fn test_tmux_flash_and_extract_integration() {
+    let Some(server) = TmuxTestServer::new("mox-flash-extract-test") else {
+        eprintln!("tmux binary not functional, skipping integration test");
+        return;
+    };
+
+    let keymap = build_default_keymap();
+    let script = generate_init_script(&keymap, "M-m", "mox", Some("#S"));
+    apply_tmux_commands(Some(&server.socket), &script).expect("failed to apply mox config");
+
+    // Verify mox table has flash and extract bindings
+    let root_keys = execute_tmux(Some(&server.socket), &["list-keys", "-T", "mox"])
+        .expect("list-keys mox failed");
+    assert!(
+        root_keys.contains("flash --launch-popup"),
+        "mox must contain flash jump"
+    );
+    assert!(
+        root_keys.contains("flash --launch-popup --multi-pane"),
+        "mox must contain multi-pane flash"
+    );
+    assert!(
+        root_keys.contains("extract --launch-popup"),
+        "mox must contain extract picker"
+    );
+
+    // Verify mox_y has quick yank and remote yank
+    let y_keys = execute_tmux(Some(&server.socket), &["list-keys", "-T", "mox_y"])
+        .expect("list-keys mox_y failed");
+    assert!(
+        y_keys.contains("quick-yank"),
+        "mox_y must contain quick-yank"
+    );
+    assert!(
+        y_keys.contains("filter hash"),
+        "mox_y must contain hash filter"
+    );
+    assert!(
+        y_keys.contains("remote-yank"),
+        "mox_y must contain remote-yank"
+    );
+    assert!(
+        y_keys.contains("extract --launch-popup"),
+        "mox_y must contain extract"
+    );
+
+    // Verify copy-mode-vi has flash and extract bindings
+    let vi_keys = execute_tmux(Some(&server.socket), &["list-keys", "-T", "copy-mode-vi"])
+        .expect("list-keys copy-mode-vi failed");
+    assert!(
+        vi_keys.contains("flash --launch-popup"),
+        "copy-mode-vi must contain flash"
+    );
+    assert!(
+        vi_keys.contains("extract --launch-popup"),
+        "copy-mode-vi must contain extract"
+    );
+
+    // Send sample text to pane and verify extraction via scanner
+    execute_tmux(
+        Some(&server.socket),
+        &[
+            "send-keys",
+            "-t",
+            "test",
+            "echo 'https://github.com/foo/bar src/main.rs:10:2 9f8e7d6c5b'",
+            "Enter",
+        ],
+    )
+    .expect("send-keys failed");
+
+    // Allow shell to render echo
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    let captured = execute_tmux(Some(&server.socket), &["capture-pane", "-p", "-t", "test"])
+        .expect("capture-pane failed");
+
+    let lines: Vec<String> = captured.lines().map(|s| s.to_string()).collect();
+    let tokens = mox::extract::scanner::scan_lines(&lines, "%0");
+
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.kind == mox::extract::model::EntityKind::Url
+                && t.clean_text.contains("github.com/foo/bar"))
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.kind == mox::extract::model::EntityKind::Path
+                && t.clean_text == "src/main.rs"
+                && t.line_number == Some(10))
+    );
+    assert!(
+        tokens.iter().any(
+            |t| t.kind == mox::extract::model::EntityKind::Hash && t.clean_text == "9f8e7d6c5b"
+        )
+    );
+}
