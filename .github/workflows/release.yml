@@ -1,0 +1,53 @@
+name: Release binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            asset: linux-x86_64
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            asset: linux-aarch64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: macos-x86_64
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            asset: macos-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: test "$GITHUB_REF_NAME" = "v$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --locked --release --target "${{ matrix.target }}"
+      - run: mkdir dist && cp "target/${{ matrix.target }}/release/mox" "dist/mox-${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mox-${{ matrix.asset }}
+          path: dist/mox-${{ matrix.asset }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mox-*
+          path: dist
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes

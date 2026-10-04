@@ -4,11 +4,13 @@
 
 Vim-style controls for tmux, with key hints when you need them.
 
+[GitHub repository](https://github.com/hackerman111/Mox)
+
 Press one key to enter modal mode, then use short key sequences to move between panes, manage windows and sessions, browse scrollback, or jump to text in a pane. Mox shows the available keys as you go. It is a single Rust binary; it does not run a background service.
 
 ## Install
 
-Requirements: tmux and, when building from source, Rust/Cargo.
+Requirements: tmux. TPM also needs `curl` or `wget` to fetch a prebuilt binary. Cargo is only needed when no release binary is available for the platform.
 
 ### TPM
 
@@ -19,11 +21,11 @@ set -g @mox_entry_key M-m
 set -g @plugin 'hackerman111/Mox'
 ```
 
-Reload tmux, then press your TPM install key (usually `prefix` + `I`). TPM loads `plugin.tmux`, which builds Mox in release mode if needed and registers the entry key.
+Keep the Mox entry after any theme plugin that sets `status-left`; Mox adds its mode indicator to that option. Reload tmux, then press your TPM install key (usually `prefix` + `I`). The loader downloads a prebuilt binary on supported systems and falls back to Cargo if none is available.
 
 ### Manual install
 
-Clone the repository and build the binary:
+Clone the repository. If no prebuilt release exists for your system, build the binary:
 
 ```sh
 git clone https://github.com/hackerman111/Mox.git
@@ -31,14 +33,16 @@ cd Mox
 cargo build --release
 ```
 
+The release workflow builds binaries for Linux (glibc, x86-64/ARM64) and macOS (Intel/Apple Silicon). To publish one, push a `v` tag matching the version in `Cargo.toml` (for example, `v0.1.0`).
+
 Add the loader to `~/.tmux.conf`, using the absolute path to this checkout:
 
 ```tmux
 set -g @mox_entry_key M-m
-run-shell "/path/to/moch/plugin.tmux"
+run-shell "/path/to/Mox/plugin.tmux"
 ```
 
-Reload tmux configuration with `tmux source-file ~/.tmux.conf`. The loader uses the built binary when available and builds it in release mode otherwise. The entry key defaults to `M-m`; set `@mox_entry_key` to change it.
+Reload tmux configuration with `tmux source-file ~/.tmux.conf`. The entry key defaults to `M-m`; set `@mox_entry_key` to change it.
 
 ## Use
 
