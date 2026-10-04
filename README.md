@@ -2,15 +2,32 @@
 
 Vim-style controls for tmux, with key hints when you need them.
 
+[GitHub repository](https://github.com/hackerman111/Mox)
+
 Press one key to enter modal mode, then use short key sequences to move between panes, manage windows and sessions, browse scrollback, or jump to text in a pane. Mox shows the available keys as you go. It is a single Rust binary; it does not run a background service.
 
 ## Install
 
 Requirements: tmux and, when building from source, Rust/Cargo.
 
-Build the binary from this repository:
+### TPM
+
+Add Mox to your `~/.tmux.conf` alongside your other TPM plugins:
+
+```tmux
+set -g @mox_entry_key M-m
+set -g @plugin 'hackerman111/Mox'
+```
+
+Reload tmux, then press your TPM install key (usually `prefix` + `I`). TPM loads `plugin.tmux`, which builds Mox in release mode if needed and registers the entry key.
+
+### Manual install
+
+Clone the repository and build the binary:
 
 ```sh
+git clone https://github.com/hackerman111/Mox.git
+cd Mox
 cargo build --release
 ```
 
@@ -27,15 +44,15 @@ Reload tmux configuration with `tmux source-file ~/.tmux.conf`. The loader uses 
 
 Press `M-m` to enter modal mode. Press `?` to see the available commands. `q` or `Escape` leaves the current submenu; `i` or another `M-m` exits modal mode.
 
-| Keys | Action |
-| --- | --- |
-| `w` | Window and pane controls |
-| `g` | Open a path or URL; navigate the tmux tree |
-| `s` / `S` | Flash jump in this pane / across panes |
-| `y` | Quick entity and hash labels, extraction, paste |
-| `v` or `[` | Scrollback and visual selection |
-| `e` | Extract text from the pane |
-| `t` / `T` | Tea timer |
+| Keys       | Action                                          |
+| ---------- | ----------------------------------------------- |
+| `w`        | Window and pane controls                        |
+| `g`        | Open a path or URL; navigate the tmux tree      |
+| `s` / `S`  | Flash jump in this pane / across panes          |
+| `y`        | Quick entity and hash labels, extraction, paste |
+| `v` or `[` | Scrollback and visual selection                 |
+| `e`        | Extract text from the pane                      |
+| `t` / `T`  | Tea timer                                       |
 
 Mox also includes Vim-style copy and extract modes, pane selection, rename prompts, and pane/window/session actions. See the [modal command map](docs/tmux-modal-parity.md) and [visual navigation guide](docs/tmux-visual-navigation.md) for the full key reference.
 
