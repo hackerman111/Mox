@@ -23,3 +23,15 @@ impl Drop for RawModeGuard {
         let _ = terminal::disable_raw_mode();
     }
 }
+
+/// RAII guard entering raw mode and hiding cursor via [`TuiGuard::enter`].
+pub struct TuiGuard(RawModeGuard);
+
+impl TuiGuard {
+    pub fn enter() -> std::io::Result<Self> {
+        terminal::enable_raw_mode()?;
+        let mut out = stdout();
+        let _ = execute!(out, cursor::Hide);
+        Ok(Self(RawModeGuard))
+    }
+}

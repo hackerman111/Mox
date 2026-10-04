@@ -67,6 +67,41 @@ enum Commands {
         #[arg(short, long)]
         socket: Option<String>,
     },
+
+    /// Launch Flash overlay for visual navigation, yanking, and remote operations
+    Flash {
+        /// Navigation mode (jump, quick-yank, quick-open, remote-yank, char-motion)
+        #[arg(short, long, default_value = "jump")]
+        mode: String,
+
+        /// Match across all window panes instead of current pane
+        #[arg(short, long)]
+        multi_pane: bool,
+
+        /// Entity filter for quick-yank or quick-open (path, url, hash, ip)
+        #[arg(short, long)]
+        filter: Option<String>,
+
+        /// Single character target for char-motion
+        #[arg(short, long)]
+        r#char: Option<char>,
+
+        /// Scan backward instead of forward for char-motion
+        #[arg(short, long)]
+        backward: bool,
+
+        /// Target tmux pane id (e.g. %0)
+        #[arg(long)]
+        target_pane: Option<String>,
+
+        /// Tmux socket name (-L)
+        #[arg(short, long)]
+        socket: Option<String>,
+
+        /// Launch borderless display-popup overlay
+        #[arg(long)]
+        launch_popup: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -134,6 +169,53 @@ fn main() -> ExitCode {
         Commands::AgentToggle { socket } => {
             if let Err(e) = mox::agent::toggle_agent_window(socket.as_deref()) {
                 eprintln!("Error toggling agent window: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+        Commands::Flash {
+            mode,
+            multi_pane,
+            filter,
+            r#char,
+            backward,
+            target_pane,
+            socket,
+            launch_popup,
+        } => {
+            let flash_mode = match mode.to_lowercase().as_str() {
+                "quick-yank" | "quickyank" => mox::flash::FlashMode::QuickYank,
+                "quick-open" | "quickopen" => mox::flash::FlashMode::QuickOpen,
+                "remote-yank" | "remoteyank" => mox::flash::FlashMode::RemoteYank,
+                "char-motion" | "charmotion" => mox::flash::FlashMode::CharMotion,
+                _ => mox::flash::FlashMode::Jump,
+            };
+
+            let entity_filter = filter
+                .as_deref()
+                .and_then(|f| match f.to_lowercase().as_str() {
+                    "path" => Some(mox::extract::EntityKind::Path),
+                    "url" => Some(mox::extract::EntityKind::Url),
+                    "hash" => Some(mox::extract::EntityKind::Hash),
+                    "ip" => Some(mox::extract::EntityKind::Ip),
+                    _ => None,
+                });
+
+            let cfg = mox::flash::FlashConfig {
+                mode: flash_mode,
+                multi_pane,
+                entity_filter,
+                target_pane,
+                motion_char: r#char,
+                motion_forward: !backward,
+            };
+
+            if launch_popup {
+                if let Err(e) = mox::flash::launch_flash_popup(socket.as_deref(), &cfg) {
+                    eprintln!("Error launching flash popup: {e}");
+                    return ExitCode::FAILURE;
+                }
+            } else if let Err(e) = mox::flash::run_flash_overlay(&cfg, socket.as_deref()) {
+                eprintln!("Error running flash overlay: {e}");
                 return ExitCode::FAILURE;
             }
         }

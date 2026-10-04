@@ -2,4 +2,4 @@
 
 pub mod guard;
 
-pub use guard::RawModeGuard;
+pub use guard::{RawModeGuard, TuiGuard};
