@@ -5,6 +5,8 @@
 
 pub mod labeler;
 pub mod matcher;
+pub mod text_object;
 
 pub use labeler::{ALPHABET, LabeledTarget, MatchTarget, assign_labels, generate_labels};
 pub use matcher::{find_char_motion_matches, find_matches, find_token_matches};
+pub use text_object::{TextObject, resolve_text_object, resolve_text_object_span};
