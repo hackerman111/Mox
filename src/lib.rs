@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod extract;
+pub mod flash;
 pub mod keymap;
 pub mod nav;
 pub mod scroll;
