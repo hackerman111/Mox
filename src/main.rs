@@ -102,6 +102,21 @@ enum Commands {
         #[arg(long)]
         launch_popup: bool,
     },
+
+    /// Launch the interactive extract fuzzy picker for terminal tokens
+    Extract {
+        /// Launch inside a tmux popup
+        #[arg(short = 'p', long)]
+        launch_popup: bool,
+
+        /// Number of scrollback lines to capture
+        #[arg(short, long, default_value_t = 2000)]
+        lines: usize,
+
+        /// Tmux socket name (-L)
+        #[arg(short, long)]
+        socket: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -216,6 +231,21 @@ fn main() -> ExitCode {
                 }
             } else if let Err(e) = mox::flash::run_flash_overlay(&cfg, socket.as_deref()) {
                 eprintln!("Error running flash overlay: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+        Commands::Extract {
+            launch_popup,
+            lines,
+            socket,
+        } => {
+            if launch_popup {
+                if let Err(e) = mox::extract::launch_extract_popup(socket.as_deref(), lines) {
+                    eprintln!("Error launching extract popup: {e}");
+                    return ExitCode::FAILURE;
+                }
+            } else if let Err(e) = mox::extract::run_extract_picker(socket.as_deref(), lines) {
+                eprintln!("Error running extract picker: {e}");
                 return ExitCode::FAILURE;
             }
         }
