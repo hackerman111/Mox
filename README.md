@@ -1,8 +1,8 @@
+<img width="1254" height="1254" alt="Moss Terminal MOX Mascot" src="https://github.com/user-attachments/assets/6ea6cdd1-d933-4199-95ad-645d2a87b068" />
+
 # Mox
 
 Vim-style controls for tmux, with key hints when you need them.
-
-[GitHub repository](https://github.com/hackerman111/Mox)
 
 Press one key to enter modal mode, then use short key sequences to move between panes, manage windows and sessions, browse scrollback, or jump to text in a pane. Mox shows the available keys as you go. It is a single Rust binary; it does not run a background service.
 
