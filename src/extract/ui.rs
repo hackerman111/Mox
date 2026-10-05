@@ -172,7 +172,7 @@ pub fn launch_extract_popup(socket: Option<&str>, lines: usize) -> std::io::Resu
         cmd.push_str(&format!(" --socket {}", crate::tmux::shell_quote(sock)));
     }
 
-    let theme = crate::ui::Theme::default();
+    let theme = crate::ui::Theme::load(socket);
     let inner = format!(
         "fg={},bg={}",
         crate::ui::status::tmux_color(theme.fg),
@@ -253,6 +253,7 @@ pub fn run_extract_picker(
     deduped.sort_by_key(|token| token.kind == EntityKind::Word);
     let mut state = ExtractState::new(deduped);
     let _guard = TuiGuard::enter()?;
+    let theme = Theme::load(socket);
 
     let mut out = std::io::BufWriter::new(stdout());
     let mut pending_g = false;
@@ -314,7 +315,7 @@ pub fn run_extract_picker(
         }
 
         if needs_redraw {
-            render_extract_ui(
+            render_extract_ui_with_theme(
                 &state,
                 pending_g,
                 scroll_offset,
@@ -323,6 +324,7 @@ pub fn run_extract_picker(
                 status.as_deref(),
                 &preview_lines,
                 &mut out,
+                &theme,
             )?;
             out.flush()?;
             needs_redraw = false;
@@ -581,9 +583,35 @@ pub fn render_extract_ui<W: Write>(
     preview_lines: &[String],
     out: &mut W,
 ) -> std::io::Result<()> {
+    render_extract_ui_with_theme(
+        state,
+        pending_g,
+        scroll_offset,
+        width,
+        height,
+        status,
+        preview_lines,
+        out,
+        &Theme::load(None),
+    )
+}
+
+/// Renders the extract picker interface with a specified theme.
+// Keep the render inputs explicit; this is the single Extract view renderer.
+#[allow(clippy::too_many_arguments)]
+pub fn render_extract_ui_with_theme<W: Write>(
+    state: &ExtractState,
+    pending_g: bool,
+    scroll_offset: usize,
+    width: usize,
+    height: usize,
+    status: Option<&str>,
+    preview_lines: &[String],
+    out: &mut W,
+    theme: &Theme,
+) -> std::io::Result<()> {
     let split = width >= 100;
     let list_width = if split { width / 2 } else { width };
-    let theme = Theme::nord();
 
     // 1. Header (> query [N matches] [MODE])
     let total_matches = state.filtered_indices.len();
@@ -665,13 +693,13 @@ pub fn render_extract_ui<W: Write>(
 
     // 3. Separator line
     queue!(out, cursor::MoveTo(0, 2))?;
-    draw_divider(out, list_width, &theme)?;
+    draw_divider(out, list_width, theme)?;
 
     // 4. List items
     let content_height = height.saturating_sub(4).max(1);
     if state.filtered_indices.is_empty() {
         queue!(out, cursor::MoveTo(0, 3))?;
-        render_empty_state(out, "no matching entities", list_width, &theme)?;
+        render_empty_state(out, "no matching entities", list_width, theme)?;
         for r in 1..content_height {
             queue!(
                 out,
@@ -699,7 +727,7 @@ pub fn render_extract_ui<W: Write>(
 
             queue!(out, cursor::MoveTo(0, row as u16))?;
 
-            let (badge, badge_color) = badge_for_kind(token.kind, &theme);
+            let (badge, badge_color) = badge_for_kind(token.kind, theme);
             let display_text = token.line_number.map_or_else(
                 || Cow::Borrowed(token.clean_text.as_str()),
                 |line| Cow::Owned(format!("{}:{line}", token.clean_text)),
@@ -712,7 +740,7 @@ pub fn render_extract_ui<W: Write>(
                 is_selected,
             };
 
-            render_list_row(out, &list_row, list_width, &theme)?;
+            render_list_row(out, &list_row, list_width, theme)?;
         }
 
         for r in visible_indices.len()..content_height {
@@ -738,7 +766,7 @@ pub fn render_extract_ui<W: Write>(
                 width: width - list_width,
                 height: height.saturating_sub(2),
             },
-            &theme,
+            theme,
         )?;
     }
 
@@ -757,7 +785,7 @@ pub fn render_extract_ui<W: Write>(
         }
     };
     queue!(out, cursor::MoveTo(0, footer_row))?;
-    render_hints(out, footer_text, width, &theme)?;
+    render_hints(out, footer_text, width, theme)?;
 
     Ok(())
 }

@@ -3,10 +3,11 @@
 use super::action::{execute_nav_tmux, format_kill_command, format_rename_command, switch_to_item};
 use super::model::{TreeItem, fetch_tmux_snapshot, visible_tree};
 use super::state::{NavigatorApp, collapse_target};
-use super::view::render_navigator;
+use super::view::render_navigator_with_theme;
 use crate::tui::RawModeGuard;
 use crate::ui::picker::Input;
 use crate::ui::preview::{Preview, PreviewWorker};
+use crate::ui::theme::Theme;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{self, Clear, ClearType};
 use crossterm::{cursor, execute};
@@ -15,6 +16,7 @@ use std::time::Duration;
 
 /// Runs the interactive Navigator TUI inside a tmux popup.
 pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
+    let theme = Theme::load(socket);
     let _guard = RawModeGuard::new()?;
     let mut app = NavigatorApp::new(fetch_tmux_snapshot(socket)?);
     let preview_worker = PreviewWorker::new(socket);
@@ -69,7 +71,7 @@ pub fn run_navigator(socket: Option<&str>) -> Result<(), String> {
         }
 
         if needs_redraw {
-            render_navigator(&app, &items, term_w, term_h, &mut out)?;
+            render_navigator_with_theme(&app, &items, term_w, term_h, &mut out, &theme)?;
             needs_redraw = false;
         }
 

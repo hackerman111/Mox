@@ -53,8 +53,27 @@ pub fn generate_init_script(
     bin_path: &str,
     current_status_left: Option<&str>,
 ) -> Vec<String> {
+    generate_init_script_with_config(
+        root_keymap,
+        entry_key,
+        bin_path,
+        current_status_left,
+        &crate::config::Config::default(),
+    )
+}
+
+/// Generates the complete tmux script for configuring mox using custom configuration.
+pub fn generate_init_script_with_config(
+    root_keymap: &KeyNode,
+    entry_key: &str,
+    bin_path: &str,
+    current_status_left: Option<&str>,
+    config: &crate::config::Config,
+) -> Vec<String> {
     let mut lines = Vec::new();
-    let (inner, border) = popup_styles();
+    let theme = crate::ui::Theme::from_config(config);
+    let color = crate::ui::status::tmux_color;
+    let (inner, border) = popup_styles_for_theme(&theme);
 
     lines.push("# === Mox tmux initialization ===".into());
 
@@ -65,41 +84,91 @@ pub fn generate_init_script(
     lines.push("# Modal status indicator".into());
     lines.push("set -g status-left-length 250".into());
 
-    let raw_status_left =
-        current_status_left.unwrap_or("#[fg=#2e3440,bg=#88c0d0,bold] #S #[default]");
-    let base_status_left = clean_status_left(raw_status_left);
-
-    let theme = crate::ui::Theme::default();
     lines.push(format!(
         "set -g @mox_indicator {}",
-        super::quote(&crate::ui::status::tmux_indicator(&theme))
+        super::quote(&crate::ui::status::tmux_indicator_with_config(
+            &config.mode_indicator,
+            &theme
+        ))
     ));
     lines.push(format!(
         "set -g status-style {}",
-        super::quote(&format!(
-            "fg={},bg={}",
-            crate::ui::status::tmux_color(theme.fg),
-            crate::ui::status::tmux_color(theme.bg)
-        ))
+        super::quote(&format!("fg={},bg={}", color(theme.fg), color(theme.bg)))
     ));
     let save_command = format!(
         "{} persist autosave --interval '#{{@mox_autosave_interval}}'",
         super::shell_quote(bin_path)
     );
     let auto = format!("#({save_command})");
-    let base_status_left = base_status_left.replace("#{E:@mox_autosave}", "");
     lines.push(format!("set -g @mox_autosave {}", super::quote(&auto)));
     lines.push(
         "if-shell -F '#{==:#{@mox_autosave_interval},}' { set -g @mox_autosave_interval 900 }"
             .into(),
     );
     lines.push("if-shell -F '#{==:#{@mox_autorestore},}' { set -g @mox_autorestore on }".into());
-    lines.push(format!(
-        "set -g status-left {}",
-        super::quote(&format!(
-            "#{{E:@mox_indicator}}#{{E:@mox_autosave}}{base_status_left}"
-        ))
-    ));
+
+    if config.status.enable {
+        lines.push(format!(
+            "set -g status-position {}",
+            super::quote(&config.status.position)
+        ));
+        lines.push("set -g status-right-length 250".into());
+
+        let mode_indicator = crate::config::status::generate_mode_indicator(config, &theme);
+        let left_bar = crate::config::status::generate_status_left(config, &theme);
+        let left_status = if let Some(raw) = current_status_left {
+            let base_status_left = clean_status_left(raw);
+            let base_status_left = base_status_left.replace("#{E:@mox_autosave}", "");
+            if !base_status_left.is_empty() && !base_status_left.contains("#[fg=") {
+                format!("#{{E:@mox_indicator}}#{{E:@mox_autosave}}{base_status_left}")
+            } else if !mode_indicator.is_empty() && left_bar.contains(&mode_indicator) {
+                left_bar.replacen(&mode_indicator, "#{E:@mox_indicator}#{E:@mox_autosave}", 1)
+            } else {
+                format!("#{{E:@mox_indicator}}#{{E:@mox_autosave}}{left_bar}")
+            }
+        } else if !mode_indicator.is_empty() && left_bar.contains(&mode_indicator) {
+            left_bar.replacen(&mode_indicator, "#{E:@mox_indicator}#{E:@mox_autosave}", 1)
+        } else {
+            format!("#{{E:@mox_indicator}}#{{E:@mox_autosave}}{left_bar}")
+        };
+        lines.push(format!("set -g status-left {}", super::quote(&left_status)));
+        lines.push(format!(
+            "set -g status-right {}",
+            super::quote(&crate::config::status::generate_status_right(
+                config, &theme
+            ))
+        ));
+        lines.push(format!(
+            "set -g window-status-format {}",
+            super::quote(&crate::config::status::generate_window_status(
+                config, &theme, false
+            ))
+        ));
+        lines.push(format!(
+            "set -g window-status-current-format {}",
+            super::quote(&crate::config::status::generate_window_status(
+                config, &theme, true
+            ))
+        ));
+        lines.push(format!(
+            "set -g window-status-separator {}",
+            super::quote(crate::config::status::generate_window_status_separator(
+                config
+            ))
+        ));
+    } else {
+        let raw_status_left =
+            current_status_left.unwrap_or("#[fg=#2e3440,bg=#88c0d0,bold] #S #[default]");
+        let base_status_left = clean_status_left(raw_status_left);
+        let base_status_left = base_status_left.replace("#{E:@mox_autosave}", "");
+        lines.push(format!(
+            "set -g status-left {}",
+            super::quote(&format!(
+                "#{{E:@mox_indicator}}#{{E:@mox_autosave}}{base_status_left}"
+            ))
+        ));
+    }
+
     let restore = format!("{} persist autorestore", super::shell_quote(bin_path));
     lines.push(format!(
         "if-shell -F '#{{==:#{{@mox_autorestore}},on}}' {{ run-shell -b {} }}",
@@ -116,10 +185,39 @@ pub fn generate_init_script(
         lines.push(format!("bind-key -T prefix {key} display-popup -E -w 85% -h 85% -b rounded -T \" Mox: {action} \" -s \"{inner}\" -S \"{border}\" {}",super::quote(&command)));
     }
 
-    // 3. Popup border styling: transparent border background ensures rounded corners do not bleed opaque pixels
+    // 3. Popup styling: transparent border background ensures rounded corners do not bleed opaque pixels
     lines.push(format!(
         "set -g popup-border-style {}",
         super::quote(&border)
+    ));
+    lines.push(format!("set -g popup-style {}", super::quote(&inner)));
+    lines.push(format!(
+        "set -g pane-border-style {}",
+        super::quote(&format!("fg={},bg=default", color(theme.border)))
+    ));
+    lines.push(format!(
+        "set -g pane-active-border-style {}",
+        super::quote(&format!("fg={},bg=default", color(theme.accent)))
+    ));
+    lines.push(format!(
+        "set -g message-style {}",
+        super::quote(&format!(
+            "fg={},bg={},bold",
+            color(theme.bg),
+            color(theme.accent)
+        ))
+    ));
+    lines.push(format!(
+        "set -g message-command-style {}",
+        super::quote(&format!(
+            "fg={},bg={},bold",
+            color(theme.bg),
+            color(theme.warning)
+        ))
+    ));
+    lines.push(format!(
+        "set -g clock-mode-colour {}",
+        super::quote(&color(theme.accent))
     ));
 
     // 4. Entry binding (default: M-m)
@@ -129,13 +227,12 @@ pub fn generate_init_script(
     ));
 
     // 5. Generate key-table bindings for root and sub-tables
-    generate_table_bindings(root_keymap, "mox", bin_path, &mut lines);
+    generate_table_bindings(root_keymap, "mox", bin_path, &mut lines, &theme);
 
     lines
 }
 
-fn popup_styles() -> (String, String) {
-    let theme = crate::ui::Theme::default();
+fn popup_styles_for_theme(theme: &crate::ui::Theme) -> (String, String) {
     let color = crate::ui::status::tmux_color;
     (
         format!("fg={},bg={}", color(theme.fg), color(theme.bg)),
@@ -148,8 +245,9 @@ fn generate_table_bindings(
     table_name: &str,
     bin_path: &str,
     lines: &mut Vec<String>,
+    theme: &crate::ui::Theme,
 ) {
-    let (inner, border) = popup_styles();
+    let (inner, border) = popup_styles_for_theme(theme);
     for child in &node.children {
         // Exit shortcuts: q, Escape, i, M-m
         if child.key == "i" || child.key == "M-m" {
@@ -234,7 +332,7 @@ fn generate_table_bindings(
             }
 
             // Also generate sub-table bindings
-            generate_table_bindings(child, &subtable_name, bin_path, lines);
+            generate_table_bindings(child, &subtable_name, bin_path, lines, theme);
         } else if let Some(action) = &child.action {
             match action {
                 KeyAction::Feature(action) => {

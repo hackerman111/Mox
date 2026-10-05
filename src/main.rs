@@ -1,8 +1,9 @@
 use clap::{Parser, Subcommand};
 use mox::keymap::build_default_keymap;
 use mox::tea::run_tea_timer;
-use mox::tmux::{apply_tmux_commands, generate_init_script};
+use mox::tmux::{apply_tmux_commands, generate_init_script_with_config};
 use mox::ui::run_which_key;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -33,6 +34,14 @@ enum Commands {
         /// Tmux socket name (-L)
         #[arg(short, long)]
         socket: Option<String>,
+
+        /// Path to custom configuration file
+        #[arg(long)]
+        config: Option<PathBuf>,
+
+        /// Override theme name
+        #[arg(long)]
+        theme: Option<String>,
     },
 
     /// Launch which-key popup menu for a key prefix
@@ -139,6 +148,8 @@ fn main() -> ExitCode {
             entry_key,
             apply,
             socket,
+            config,
+            theme,
         } => {
             let keymap = build_default_keymap();
             let bin_path = std::env::current_exe()
@@ -147,11 +158,17 @@ fn main() -> ExitCode {
             let current_status_left =
                 mox::tmux::execute_tmux(socket.as_deref(), &["show-option", "-gv", "status-left"])
                     .ok();
-            let script_lines = generate_init_script(
+            let mut cfg = mox::config::loader::load_config(config.as_deref());
+            if let Some(t) = theme {
+                cfg.theme = t;
+            }
+            mox::config::loader::apply_tmux_server_overrides(&mut cfg, socket.as_deref());
+            let script_lines = generate_init_script_with_config(
                 &keymap,
                 &entry_key,
                 &bin_path,
                 current_status_left.as_deref(),
+                &cfg,
             );
 
             if apply {

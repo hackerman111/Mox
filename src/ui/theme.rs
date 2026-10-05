@@ -183,6 +183,13 @@ impl Theme {
     pub fn from_config(config: &crate::config::Config) -> Self {
         crate::config::resolve_theme(&config.theme, config.custom_theme.as_ref())
     }
+
+    /// Loads the active theme from configuration and tmux server option overrides.
+    pub fn load(socket: Option<&str>) -> Self {
+        let mut config = crate::config::loader::load_config(None);
+        crate::config::loader::apply_tmux_server_overrides(&mut config, socket);
+        Self::from_config(&config)
+    }
 }
 
 impl Default for Theme {

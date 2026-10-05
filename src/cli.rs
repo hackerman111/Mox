@@ -87,6 +87,25 @@ pub enum Commands {
         #[arg(long)]
         socket: Option<String>,
     },
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+        #[arg(long, global = true)]
+        socket: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommand {
+    /// Print the starter commented configuration file (default.toml)
+    Default,
+    /// Print the path to the active configuration file
+    Path,
+    /// Show current configuration as TOML
+    Show {
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
 }
 #[derive(Debug, Subcommand)]
 pub enum EditorCommand {
@@ -294,6 +313,27 @@ pub fn run(command: Commands) -> Result<(), String> {
             Ok(())
         }
         Commands::Clipboard { socket, text } => crate::clipboard::copy(socket.as_deref(), &text),
+        Commands::Config { command, socket } => match command {
+            ConfigCommand::Default => {
+                print!("{}", crate::config::loader::default_toml());
+                Ok(())
+            }
+            ConfigCommand::Path => {
+                if let Some(path) = crate::config::loader::default_config_path() {
+                    println!("{}", path.display());
+                    Ok(())
+                } else {
+                    Err("No default configuration path resolved".into())
+                }
+            }
+            ConfigCommand::Show { config } => {
+                let mut cfg = crate::config::loader::load_config(config.as_deref());
+                crate::config::loader::apply_tmux_server_overrides(&mut cfg, socket.as_deref());
+                let toml_str = toml::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+                print!("{toml_str}");
+                Ok(())
+            }
+        },
     }
 }
 fn launch(socket: Option<&str>, subcommand: &str) -> Result<(), String> {

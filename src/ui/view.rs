@@ -124,11 +124,20 @@ pub fn build_display_items(node: &KeyNode) -> Vec<(String, String)> {
 
 pub fn render_menu(
     node: &KeyNode,
+    history: &[&KeyNode],
+    prefix_str: &str,
+    status_msg: Option<&str>,
+) -> Result<(), String> {
+    render_menu_with_theme(node, history, prefix_str, status_msg, &Theme::load(None))
+}
+
+pub fn render_menu_with_theme(
+    node: &KeyNode,
     _history: &[&KeyNode],
     _prefix_str: &str,
     status_msg: Option<&str>,
+    theme: &Theme,
 ) -> Result<(), String> {
-    let theme = Theme::nord();
     let mut out = std::io::BufWriter::new(stdout());
     crossterm::queue!(out, Clear(ClearType::All), cursor::MoveTo(0, 0))
         .map_err(|e| format!("Render error: {e}"))?;
@@ -156,7 +165,7 @@ pub fn render_menu(
     };
 
     crossterm::queue!(out, Print("  ")).map_err(|e| e.to_string())?;
-    render_status_badge(&mut out, mode, node.sticky, &theme).map_err(|e| e.to_string())?;
+    render_status_badge(&mut out, mode, node.sticky, theme).map_err(|e| e.to_string())?;
     crossterm::queue!(
         out,
         SetForegroundColor(theme.muted),
@@ -200,7 +209,7 @@ pub fn render_menu(
 
     if let Some(msg) = status_msg {
         crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
-        render_toast(&mut out, msg, false, cols, &theme).map_err(|e| e.to_string())?;
+        render_toast(&mut out, msg, false, cols, theme).map_err(|e| e.to_string())?;
         crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
     } else {
         crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
@@ -208,7 +217,7 @@ pub fn render_menu(
             &mut out,
             "[key] run    [q/Esc] back    [i] insert",
             cols,
-            &theme,
+            theme,
         )
         .map_err(|e| e.to_string())?;
         crossterm::queue!(out, Print("\r\n")).map_err(|e| e.to_string())?;
@@ -219,10 +228,13 @@ pub fn render_menu(
 }
 
 pub fn prompt_confirm(prompt: &str) -> Result<bool, String> {
-    let theme = Theme::nord();
+    prompt_confirm_with_theme(prompt, &Theme::load(None))
+}
+
+pub fn prompt_confirm_with_theme(prompt: &str, theme: &Theme) -> Result<bool, String> {
     let mut out = stdout();
     execute!(out, cursor::MoveToNextLine(1)).map_err(|e| e.to_string())?;
-    render_confirm(&mut out, prompt, &theme).map_err(|e| e.to_string())?;
+    render_confirm(&mut out, prompt, theme).map_err(|e| e.to_string())?;
     execute!(out, Print(" (y/n) ")).map_err(|e| e.to_string())?;
     out.flush().map_err(|e| e.to_string())?;
 

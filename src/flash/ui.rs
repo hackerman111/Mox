@@ -208,8 +208,8 @@ fn render_flash_screen(
     prompt_title: &str,
     status_text: &str,
     input_highlight: &str,
+    theme: &Theme,
 ) -> std::io::Result<()> {
-    let theme = Theme::nord();
     let (term_w, term_h) = terminal::size().unwrap_or((80, 24));
     let term_w = term_w as usize;
     let term_h = term_h as usize;
@@ -348,6 +348,7 @@ fn render_flash_screen(
 /// Runs the interactive Flash overlay.
 pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Result<()> {
     let _guard = TuiGuard::enter()?;
+    let theme = Theme::load(socket);
     let mut out = stdout();
 
     let (panes, cursor_row, cursor_col, _active_pane_id) = capture_panes_content(socket, cfg);
@@ -396,6 +397,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                     title,
                     failure.as_deref().unwrap_or(&status),
                     &input_label,
+                    &theme,
                 )?;
 
                 if let Event::Key(key) = event::read()? {
@@ -466,6 +468,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                     "CHAR MOTION",
                     "Type target character (Esc to cancel):",
                     "",
+                    &theme,
                 )?;
                 loop {
                     if let Event::Key(key) = event::read()? {
@@ -530,6 +533,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                     "CHAR MOTION",
                     &status,
                     &input_label,
+                    &theme,
                 )?;
 
                 if let Event::Key(key) = event::read()? {
@@ -605,6 +609,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                     "FLASH JUMP",
                     &status,
                     &input_label,
+                    &theme,
                 )?;
 
                 if let Event::Key(key) = event::read()? {
@@ -742,6 +747,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                     "REMOTE YANK",
                     &status,
                     &input_label,
+                    &theme,
                 )?;
 
                 if let Event::Key(key) = event::read()? {
@@ -848,6 +854,7 @@ pub fn run_flash_overlay(cfg: &FlashConfig, socket: Option<&str>) -> std::io::Re
                         "REMOTE YANK",
                         status,
                         "",
+                        &theme,
                     )?;
 
                     if let Event::Key(key) = event::read()? {

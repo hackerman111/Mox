@@ -1,13 +1,15 @@
 //! Interactive event loop and action dispatching for the which-key popup.
 
-use super::view::{prompt_confirm, render_menu};
+use super::view::{prompt_confirm_with_theme, render_menu_with_theme};
 use crate::keymap::{KeyAction, KeyNode, build_default_keymap};
 use crate::tmux::execute_tmux;
 use crate::tui::RawModeGuard;
+use crate::ui::theme::Theme;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 
 /// Runs the interactive which-key loop inside a tmux popup.
 pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), String> {
+    let theme = Theme::load(socket);
     let root = build_default_keymap();
     let prefix_tokens: Vec<&str> = prefix_str.split_whitespace().collect();
 
@@ -19,11 +21,12 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
     let mut status_message: Option<String> = None;
 
     loop {
-        render_menu(
+        render_menu_with_theme(
             current_node,
             &history_stack,
             prefix_str,
             status_message.as_deref(),
+            &theme,
         )?;
         status_message = None;
 
@@ -88,7 +91,7 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                             break;
                         }
                         KeyAction::Confirm { prompt, command } => {
-                            if prompt_confirm(prompt)? {
+                            if prompt_confirm_with_theme(prompt, &theme)? {
                                 let _ = execute_shell_tmux(socket, command);
                                 if current_node.sticky {
                                     status_message = Some(format!("Confirmed: {}", command));

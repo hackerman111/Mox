@@ -48,7 +48,7 @@ pub fn run_tea_timer() -> Result<(), String> {
 }
 
 fn render_tea_ui(timer: &TeaTimer) -> Result<(), String> {
-    let theme = crate::ui::Theme::default();
+    let theme = crate::ui::Theme::load(None);
     let mut out = stdout();
     execute!(out, Clear(ClearType::All), cursor::MoveTo(0, 0)).map_err(|e| e.to_string())?;
 

@@ -21,7 +21,17 @@ pub fn render_navigator<W: Write>(
     height: usize,
     out: &mut W,
 ) -> Result<(), String> {
-    let theme = Theme::nord();
+    render_navigator_with_theme(app, items, width, height, out, &Theme::load(None))
+}
+
+pub fn render_navigator_with_theme<W: Write>(
+    app: &NavigatorApp,
+    items: &[TreeItem],
+    width: usize,
+    height: usize,
+    out: &mut W,
+    theme: &Theme,
+) -> Result<(), String> {
     let _ = queue!(
         out,
         cursor::MoveTo(0, 0),
@@ -44,11 +54,11 @@ pub fn render_navigator<W: Write>(
     } else {
         "[NORMAL]"
     };
-    let _ = render_prompt(out, mode_badge, &app.picker.query, None, tree_width, &theme);
+    let _ = render_prompt(out, mode_badge, &app.picker.query, None, tree_width, theme);
 
     // Divider line
     let _ = queue!(out, cursor::MoveTo(0, 1));
-    let _ = draw_divider(out, tree_width, &theme);
+    let _ = draw_divider(out, tree_width, theme);
     // Tree rows
     for row in 0..content_height {
         let y = (row + 2) as u16;
@@ -68,7 +78,7 @@ pub fn render_navigator<W: Write>(
                 is_active: active,
                 is_selected: item_idx == app.picker.selected,
             };
-            let _ = render_tree_row(out, &row, tree_width, &theme);
+            let _ = render_tree_row(out, &row, tree_width, theme);
         } else {
             let _ = queue!(out, Print(" ".repeat(tree_width)));
         }
@@ -85,20 +95,20 @@ pub fn render_navigator<W: Write>(
                 width: preview_width,
                 height: height.saturating_sub(2),
             },
-            &theme,
+            theme,
         );
     }
 
     // 3. Footer / Help Bar
     let footer_y = (height.saturating_sub(2)) as u16;
     let _ = queue!(out, cursor::MoveTo(0, footer_y));
-    let _ = draw_divider(out, width, &theme);
+    let _ = draw_divider(out, width, theme);
 
     let status_y = (height.saturating_sub(1)) as u16;
     let _ = queue!(out, cursor::MoveTo(0, status_y));
 
     if let Some((prompt, _)) = &app.confirm_action {
-        let _ = render_confirm(out, prompt, &theme);
+        let _ = render_confirm(out, prompt, theme);
         let _ = queue!(out, Clear(ClearType::UntilNewLine));
     } else if let Some((target_type, _)) = &app.rename_target {
         let prompt_str = format!(" Rename {target_type}: {}_ ", app.rename_buffer);
@@ -112,7 +122,7 @@ pub fn render_navigator<W: Write>(
     } else {
         let help_text =
             "Enter:Switch │ dd:Kill │ r:Rename │ Tab:Fold │ ?:Preview │ /:Search │ Esc:Exit";
-        let _ = render_hints(out, help_text, width, &theme);
+        let _ = render_hints(out, help_text, width, theme);
         let _ = queue!(out, Clear(ClearType::UntilNewLine));
     }
 
