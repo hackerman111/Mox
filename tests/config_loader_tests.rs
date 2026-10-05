@@ -280,4 +280,3 @@ fn test_apply_tmux_overrides_status_position() {
     apply_tmux_overrides(&mut config, |key| options.get(key).cloned());
     assert_eq!(config.status.position, "bottom");
 }
-

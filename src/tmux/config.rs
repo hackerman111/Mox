@@ -427,6 +427,30 @@ fn generate_table_bindings(
                         super::quote(&command)
                     ));
                 }
+                KeyAction::AppsPanel => {
+                    let command = format!("{} apps", super::shell_quote(bin_path));
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S ; display-popup -E -w 85% -h 85% -b rounded -T \" Mox: Apps \" -s \"{inner}\" -S \"{border}\" {} }}",
+                        child.key,
+                        super::quote(&command)
+                    ));
+                }
+                KeyAction::FloaxToggle => {
+                    let command = format!("{} floax", super::shell_quote(bin_path));
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} run-shell {}",
+                        child.key,
+                        super::quote(&command)
+                    ));
+                }
+                KeyAction::TrackToggle => {
+                    let command = format!("{} track toggle", super::shell_quote(bin_path));
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} run-shell {}",
+                        child.key,
+                        super::quote(&command)
+                    ));
+                }
                 KeyAction::ExitModal => {
                     lines.push(format!(
                         "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S }}",

@@ -1,7 +1,6 @@
 //! Canonical default keymap definitions for `moch`.
 
 use super::types::{KeyAction, KeyNode};
-use clap::ValueEnum;
 
 /// Builds the canonical default keymap for `moch`.
 pub fn build_default_keymap() -> KeyNode {
@@ -161,8 +160,9 @@ pub fn build_default_keymap() -> KeyNode {
             KeyAction::Navigator,
         ),
         KeyNode::new_branch("S", "session menu", session_children),
-        KeyNode::new_action("a", "agent toggle", KeyAction::AgentToggle),
+        KeyNode::new_action("a", "apps panel", KeyAction::AppsPanel),
         KeyNode::new_action("A", "agent create", KeyAction::AgentCreate),
+        KeyNode::new_action("p", "floax scratchpad", KeyAction::FloaxToggle),
         KeyNode::new_action(
             "v",
             "split vertical",
@@ -214,8 +214,8 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action(
             "t",
-            "tree navigator",
-            KeyAction::Navigator,
+            "toggle tracked window",
+            KeyAction::TrackToggle,
         ),
         KeyNode::new_action("r", "resize mode", KeyAction::SwitchTable("mox_r".into())),
         KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
@@ -318,9 +318,10 @@ pub fn build_default_keymap() -> KeyNode {
     // 6. Root Modal Keymap ('mox' / NORMAL mode)
     // -------------------------------------------------------------
     let mut root_children = vec![
-        // AI Agents
-        KeyNode::new_action("a", "agent toggle", KeyAction::AgentToggle),
+        // Apps & Agents
+        KeyNode::new_action("a", "apps panel", KeyAction::AppsPanel),
         KeyNode::new_action("A", "agent create", KeyAction::AgentCreate),
+        KeyNode::new_action("p", "floax scratchpad", KeyAction::FloaxToggle),
         // Navigation: smart move - if multiple panes, switch pane; if 1 pane, switch window!
         KeyNode::new_action(
             "h",
@@ -360,6 +361,11 @@ pub fn build_default_keymap() -> KeyNode {
             "f",
             "files",
             KeyAction::Feature(crate::actions::FeatureAction::Files),
+        ),
+        KeyNode::new_action(
+            "B",
+            "btop",
+            KeyAction::Feature(crate::actions::FeatureAction::Btop),
         ),
         KeyNode::new_action(
             "N",
@@ -434,7 +440,7 @@ pub fn build_default_keymap() -> KeyNode {
         // Utilities & Scrolling
         KeyNode::new_action("[", "vim scrollback", KeyAction::CopyMode),
         KeyNode::new_action("T", "tea timer", KeyAction::TeaTimer),
-        KeyNode::new_action("t", "tea timer", KeyAction::TeaTimer),
+        KeyNode::new_action("t", "toggle tracked window", KeyAction::TrackToggle),
         KeyNode::new_action("Enter", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action(
             ":",
@@ -453,18 +459,6 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_action("q", "insert mode", KeyAction::ExitModal),
         KeyNode::new_action("M-m", "insert mode", KeyAction::ExitModal),
     ];
-
-    let feature_children = crate::actions::FeatureAction::value_variants()
-        .iter()
-        .enumerate()
-        .map(|(index, action)| {
-            let key = [
-                "p", "o", "f", "g", "/", "l", "s", "r", "a", "z", "v", "h", "c", "u",
-            ][index];
-            KeyNode::new_action(key, action.label(), KeyAction::Feature(*action))
-        })
-        .collect();
-    root_children.push(KeyNode::new_branch("p", "Mox features", feature_children));
 
     // Numbers 0..9 for direct window jumping in normal mode
     for i in 0..=9 {

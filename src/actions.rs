@@ -7,7 +7,7 @@ use crate::ui::{
 };
 use clap::ValueEnum;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize)]
 pub enum FeatureAction {
     Palette,
     Projects,
@@ -15,6 +15,10 @@ pub enum FeatureAction {
     GitFiles,
     Search,
     LazyGit,
+    Btop,
+    Apps,
+    Floax,
+    TrackToggle,
     Save,
     Restore,
     LogStart,
@@ -38,6 +42,10 @@ impl FeatureAction {
             Self::GitFiles => "git changes → Neovim",
             Self::Search => "ripgrep → Neovim",
             Self::LazyGit => "LazyGit",
+            Self::Btop => "btop",
+            Self::Apps => "apps panel",
+            Self::Floax => "floax scratchpad",
+            Self::TrackToggle => "toggle tracked window",
             Self::Save => "save sessions",
             Self::Restore => "restore sessions",
             Self::LogStart => "start pane logging",
@@ -93,6 +101,32 @@ fn execute(action: FeatureAction, socket: Option<&str>) -> Result<(), String> {
             crate::editor::files::pick(socket, source, query.as_deref(), None)
         }
         LazyGit => crate::lazygit::open(socket, None, false),
+        Btop => {
+            let config = crate::config::loader::load_config(None);
+            let app = config
+                .apps
+                .iter()
+                .find(|a| a.name == "btop")
+                .cloned()
+                .unwrap_or_else(|| crate::apps::model::AppConfig {
+                    name: "btop".to_string(),
+                    title: "btop".to_string(),
+                    command: "btop".to_string(),
+                    key: Some("B".to_string()),
+                    mode: crate::apps::model::AppLaunchMode::Popup {
+                        width: "85%".to_string(),
+                        height: "85%".to_string(),
+                    },
+                    focus_existing: true,
+                    check_binary: true,
+                });
+            crate::apps::run_app(socket, &app, None, false)
+        }
+        Apps => crate::apps::run_apps_panel(socket, None),
+        Floax => {
+            crate::apps::toggle_floax(socket, &crate::apps::floax::FloaxConfig::default(), None)
+        }
+        TrackToggle => crate::apps::toggle_tracked_window(socket, None),
         Save => crate::persist::save(socket, &crate::persist::default_path(socket)?),
         Restore => crate::persist::restore(socket, &crate::persist::default_path(socket)?, false),
         Suspend => crate::navigation::suspend(socket, None, false),
@@ -155,6 +189,11 @@ pub fn dispatch(action: &KeyAction, socket: Option<&str>) -> Result<(), String> 
         KeyAction::TeaTimer => crate::tea::run_tea_timer(),
         KeyAction::AgentToggle => crate::agent::toggle_agent_window(socket),
         KeyAction::AgentCreate => crate::agent::create_agent_window(socket),
+        KeyAction::AppsPanel => crate::apps::run_apps_panel(socket, None),
+        KeyAction::FloaxToggle => {
+            crate::apps::toggle_floax(socket, &crate::apps::floax::FloaxConfig::default(), None)
+        }
+        KeyAction::TrackToggle => crate::apps::toggle_tracked_window(socket, None),
         KeyAction::CopyMode => execute_tmux(socket, &["copy-mode"]).map(|_| ()),
         KeyAction::WhichKey => crate::ui::run_which_key("", socket),
         KeyAction::SwitchTable(table) => {

@@ -27,11 +27,19 @@ fn test_root_keymap_completeness() {
     // Check modal actions
     assert_eq!(
         root.find_child("a").unwrap().action,
-        Some(KeyAction::AgentToggle)
+        Some(KeyAction::AppsPanel)
+    );
+    assert_eq!(
+        root.find_child("p").unwrap().action,
+        Some(KeyAction::FloaxToggle)
     );
     assert_eq!(
         root.find_child("A").unwrap().action,
         Some(KeyAction::AgentCreate)
+    );
+    assert_eq!(
+        root.find_child("B").unwrap().action,
+        Some(KeyAction::Feature(mox::actions::FeatureAction::Btop))
     );
     assert_eq!(
         root.find_child("Enter").unwrap().action,
@@ -39,7 +47,7 @@ fn test_root_keymap_completeness() {
     );
     assert_eq!(
         root.find_child("t").unwrap().action,
-        Some(KeyAction::TeaTimer)
+        Some(KeyAction::TrackToggle)
     );
     assert_eq!(
         root.find_child("T").unwrap().action,
@@ -237,8 +245,8 @@ fn test_navigator_exits_modal_mode() {
         .find(|l| l.contains("bind-key -T mox a"))
         .expect("mox a binding missing");
     assert!(
-        mox_root_a.contains("agent-toggle"),
-        "must contain agent-toggle: {mox_root_a}"
+        mox_root_a.contains("apps"),
+        "must contain apps: {mox_root_a}"
     );
 
     let mox_root_enter = script
@@ -255,8 +263,8 @@ fn test_navigator_exits_modal_mode() {
         .find(|l| l.contains("bind-key -T mox t"))
         .expect("mox t binding missing");
     assert!(
-        mox_root_t.contains("tea"),
-        "must contain tea timer: {mox_root_t}"
+        mox_root_t.contains("track toggle"),
+        "must contain track toggle: {mox_root_t}"
     );
 }
 

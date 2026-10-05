@@ -148,6 +148,28 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                             let _ = crate::agent::create_agent_window(socket);
                             break;
                         }
+                        KeyAction::AppsPanel => {
+                            let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
+                            let _ = execute_tmux(socket, &["refresh-client", "-S"]);
+                            crate::apps::run_apps_panel(socket, None)?;
+                            break;
+                        }
+                        KeyAction::FloaxToggle => {
+                            let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
+                            let _ = execute_tmux(socket, &["refresh-client", "-S"]);
+                            let _ = crate::apps::toggle_floax(
+                                socket,
+                                &crate::apps::floax::FloaxConfig::default(),
+                                None,
+                            );
+                            break;
+                        }
+                        KeyAction::TrackToggle => {
+                            let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
+                            let _ = execute_tmux(socket, &["refresh-client", "-S"]);
+                            let _ = crate::apps::toggle_tracked_window(socket, None);
+                            break;
+                        }
                         KeyAction::WhichKey => {
                             continue;
                         }

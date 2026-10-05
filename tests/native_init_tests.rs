@@ -68,7 +68,7 @@ fn init_quotes_binary_path_in_tmux_shell_commands() {
         format!("{shell_path} which-key"),
         format!("{shell_path} tea"),
         format!("{shell_path} nav"),
-        format!("{shell_path} agent-toggle"),
+        format!("{shell_path} floax"),
         format!("{shell_path} agent-create"),
         format!("{shell_path} extract --launch-popup"),
     ] {
@@ -90,10 +90,7 @@ fn init_quotes_binary_path_in_tmux_shell_commands() {
         keys.contains("which-key"),
         "submenu command missing: {keys}"
     );
-    assert!(
-        keys.contains("agent-toggle"),
-        "agent command missing: {keys}"
-    );
+    assert!(keys.contains("floax"), "floax command missing: {keys}");
     assert!(
         keys.contains("--launch-popup"),
         "flash/extract command missing: {keys}"

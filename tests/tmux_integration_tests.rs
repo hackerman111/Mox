@@ -79,8 +79,8 @@ fn test_tmux_isolated_server_integration() {
     assert!(all_keys.contains("kill-pane"));
     assert!(all_keys.contains("kill-window"));
 
-    // 4. Verify Navigator and Agent bindings
-    assert!(all_keys.contains("agent-toggle"));
+    // 4. Verify Navigator, Apps, and Agent bindings
+    assert!(all_keys.contains("apps"));
     assert!(all_keys.contains("agent-create"));
     assert!(all_keys.contains("nav"));
 }

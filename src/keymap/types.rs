@@ -29,6 +29,12 @@ pub enum KeyAction {
     AgentToggle,
     /// Create a new AI agent window.
     AgentCreate,
+    /// Launch the interactive apps and scratchpads panel.
+    AppsPanel,
+    /// Toggle native floax persistent scratchpad terminal.
+    FloaxToggle,
+    /// Toggle tracked tmux window.
+    TrackToggle,
     /// Exit modal mode back to normal tmux root input.
     ExitModal,
 }
