@@ -217,6 +217,11 @@ pub fn build_default_keymap() -> KeyNode {
             "toggle tracked window",
             KeyAction::TrackToggle,
         ),
+        KeyNode::new_action(
+            "T",
+            "track current window",
+            KeyAction::TrackCurrentToggle,
+        ),
         KeyNode::new_action("r", "resize mode", KeyAction::SwitchTable("mox_r".into())),
         KeyNode::new_action("q", "back to normal", KeyAction::SwitchTable("mox".into())),
         KeyNode::new_action(
@@ -258,6 +263,7 @@ pub fn build_default_keymap() -> KeyNode {
         ),
         KeyNode::new_action("w", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action("t", "tea timer", KeyAction::TeaTimer),
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action(
             "h",
@@ -439,7 +445,7 @@ pub fn build_default_keymap() -> KeyNode {
         KeyNode::new_branch("y", "yank menu", yank_children),
         // Utilities & Scrolling
         KeyNode::new_action("[", "vim scrollback", KeyAction::CopyMode),
-        KeyNode::new_action("T", "tea timer", KeyAction::TeaTimer),
+        KeyNode::new_action("T", "track current window", KeyAction::TrackCurrentToggle),
         KeyNode::new_action("t", "toggle tracked window", KeyAction::TrackToggle),
         KeyNode::new_action("Enter", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action(

@@ -451,6 +451,14 @@ fn generate_table_bindings(
                         super::quote(&command)
                     ));
                 }
+                KeyAction::TrackCurrentToggle => {
+                    let command = format!("{} track toggle", super::shell_quote(bin_path));
+                    lines.push(format!(
+                        "bind-key -T {table_name} {} run-shell {}",
+                        child.key,
+                        super::quote(&command)
+                    ));
+                }
                 KeyAction::ExitModal => {
                     lines.push(format!(
                         "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S }}",

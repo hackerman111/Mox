@@ -19,6 +19,7 @@ pub enum FeatureAction {
     Apps,
     Floax,
     TrackToggle,
+    TrackCurrentToggle,
     Save,
     Restore,
     LogStart,
@@ -46,6 +47,7 @@ impl FeatureAction {
             Self::Apps => "apps panel",
             Self::Floax => "floax scratchpad",
             Self::TrackToggle => "toggle tracked window",
+            Self::TrackCurrentToggle => "toggle track current window",
             Self::Save => "save sessions",
             Self::Restore => "restore sessions",
             Self::LogStart => "start pane logging",
@@ -127,6 +129,21 @@ fn execute(action: FeatureAction, socket: Option<&str>) -> Result<(), String> {
             crate::apps::toggle_floax(socket, &crate::apps::floax::FloaxConfig::default(), None)
         }
         TrackToggle => crate::apps::toggle_tracked_window(socket, None),
+        TrackCurrentToggle => {
+            let tracked = crate::apps::toggle_current_window_tracking(socket)?;
+            let win_info = execute_tmux(
+                socket,
+                &["display-message", "-p", "#{window_name} (#{window_id})"],
+            )
+            .unwrap_or_default();
+            let msg = if tracked {
+                format!("Tracked window {}", win_info.trim())
+            } else {
+                format!("Untracked window {}", win_info.trim())
+            };
+            let _ = execute_tmux(socket, &["display-message", &msg]);
+            Ok(())
+        }
         Save => crate::persist::save(socket, &crate::persist::default_path(socket)?),
         Restore => crate::persist::restore(socket, &crate::persist::default_path(socket)?, false),
         Suspend => crate::navigation::suspend(socket, None, false),
@@ -194,6 +211,21 @@ pub fn dispatch(action: &KeyAction, socket: Option<&str>) -> Result<(), String> 
             crate::apps::toggle_floax(socket, &crate::apps::floax::FloaxConfig::default(), None)
         }
         KeyAction::TrackToggle => crate::apps::toggle_tracked_window(socket, None),
+        KeyAction::TrackCurrentToggle => {
+            let tracked = crate::apps::toggle_current_window_tracking(socket)?;
+            let win_info = execute_tmux(
+                socket,
+                &["display-message", "-p", "#{window_name} (#{window_id})"],
+            )
+            .unwrap_or_default();
+            let msg = if tracked {
+                format!("Tracked window {}", win_info.trim())
+            } else {
+                format!("Untracked window {}", win_info.trim())
+            };
+            let _ = execute_tmux(socket, &["display-message", &msg]);
+            Ok(())
+        }
         KeyAction::CopyMode => execute_tmux(socket, &["copy-mode"]).map(|_| ()),
         KeyAction::WhichKey => crate::ui::run_which_key("", socket),
         KeyAction::SwitchTable(table) => {

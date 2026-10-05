@@ -35,6 +35,8 @@ pub enum KeyAction {
     FloaxToggle,
     /// Toggle tracked tmux window.
     TrackToggle,
+    /// Toggle whether the current window is tracked.
+    TrackCurrentToggle,
     /// Exit modal mode back to normal tmux root input.
     ExitModal,
 }

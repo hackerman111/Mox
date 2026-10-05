@@ -170,6 +170,25 @@ pub fn run_which_key(prefix_str: &str, socket: Option<&str>) -> Result<(), Strin
                             let _ = crate::apps::toggle_tracked_window(socket, None);
                             break;
                         }
+                        KeyAction::TrackCurrentToggle => {
+                            let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
+                            let _ = execute_tmux(socket, &["refresh-client", "-S"]);
+                            if let Ok(tracked) = crate::apps::toggle_current_window_tracking(socket)
+                            {
+                                let win_info = execute_tmux(
+                                    socket,
+                                    &["display-message", "-p", "#{window_name} (#{window_id})"],
+                                )
+                                .unwrap_or_default();
+                                let msg = if tracked {
+                                    format!("Tracked window {}", win_info.trim())
+                                } else {
+                                    format!("Untracked window {}", win_info.trim())
+                                };
+                                let _ = execute_tmux(socket, &["display-message", &msg]);
+                            }
+                            break;
+                        }
                         KeyAction::WhichKey => {
                             continue;
                         }

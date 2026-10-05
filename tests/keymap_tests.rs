@@ -51,7 +51,7 @@ fn test_root_keymap_completeness() {
     );
     assert_eq!(
         root.find_child("T").unwrap().action,
-        Some(KeyAction::TeaTimer)
+        Some(KeyAction::TrackCurrentToggle)
     );
     assert_eq!(
         root.find_child("[").unwrap().action,
