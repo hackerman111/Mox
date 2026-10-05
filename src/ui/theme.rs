@@ -178,6 +178,11 @@ impl Theme {
             mode_agent: nord::NORD15,
         }
     }
+
+    /// Resolves theme settings from configuration.
+    pub fn from_config(config: &crate::config::Config) -> Self {
+        crate::config::resolve_theme(&config.theme, config.custom_theme.as_ref())
+    }
 }
 
 impl Default for Theme {
