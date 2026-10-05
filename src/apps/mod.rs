@@ -6,7 +6,9 @@ pub mod runner;
 pub mod tracking;
 pub mod ui;
 
-pub use floax::{FloaxConfig, ensure_floax_session, has_floax_session, toggle_floax};
+pub use floax::{
+    FloaxConfig, ensure_floax_session, has_floax_session, is_floax_attached, toggle_floax,
+};
 pub use runner::{check_binary, find_existing_pane, run_app};
 pub use tracking::{
     is_window_tracked, list_tracked_windows, parse_tracked_windows, toggle_current_window_tracking,

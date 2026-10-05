@@ -438,7 +438,7 @@ fn generate_table_bindings(
                 KeyAction::FloaxToggle => {
                     let command = format!("{} floax", super::shell_quote(bin_path));
                     lines.push(format!(
-                        "bind-key -T {table_name} {} run-shell {}",
+                        "bind-key -T {table_name} {} {{ set-option key-table root ; refresh-client -S ; run-shell {} }}",
                         child.key,
                         super::quote(&command)
                     ));

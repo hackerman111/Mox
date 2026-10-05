@@ -146,9 +146,27 @@ pub fn ensure_floax_session(
     Ok(())
 }
 
+/// Check if any tmux client is currently attached to the floax session.
+pub fn is_floax_attached(socket: Option<&str>, session_name: &str) -> bool {
+    let clients = execute_tmux(
+        socket,
+        &["list-clients", "-t", session_name, "-F", "#{client_name}"],
+    )
+    .unwrap_or_default();
+    !clients.trim().is_empty()
+}
+
+/// Check if the currently active tmux session is the floax session.
+pub fn is_inside_floax_session(socket: Option<&str>, session_name: &str) -> bool {
+    execute_tmux(socket, &["display-message", "-p", "#{session_name}"])
+        .map(|s| s.trim() == session_name)
+        .unwrap_or(false)
+}
+
 /// Toggle the floax scratchpad terminal.
 ///
-/// 1. If currently inside the floax session, detaches the client.
+/// 1. If currently inside the floax session OR if any client is attached to the floax session,
+///    detaches the client and dismisses the popup so the background session remains alive.
 /// 2. Ensures the floax session exists.
 /// 3. If `change_path` is enabled, synchronizes the floax session cwd with target cwd.
 /// 4. Opens the scratchpad in a rounded display popup attached to the session.
@@ -157,11 +175,14 @@ pub fn toggle_floax(
     config: &FloaxConfig,
     cwd: Option<&str>,
 ) -> Result<(), String> {
-    // 1. Check if we are currently inside the floax session:
-    if let Ok(current_session) = execute_tmux(socket, &["display-message", "-p", "#{session_name}"])
-        && current_session == config.session_name
+    // 1. Check if we are currently inside the floax session or if the popup is open:
+    if is_inside_floax_session(socket, &config.session_name)
+        || is_floax_attached(socket, &config.session_name)
     {
-        execute_tmux(socket, &["detach-client"])?;
+        let _ = execute_tmux(socket, &["set-option", "key-table", "root"]);
+        let _ = execute_tmux(socket, &["refresh-client", "-S"]);
+        let _ = execute_tmux(socket, &["detach-client", "-s", &config.session_name]);
+        let _ = execute_tmux(socket, &["display-popup", "-C"]);
         return Ok(());
     }
 

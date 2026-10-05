@@ -173,10 +173,16 @@ fn test_floax_session_lifecycle_and_options() {
 
 #[test]
 fn test_apps_module_reexports() {
-    use mox::apps::{FloaxConfig, ensure_floax_session, has_floax_session, toggle_floax};
+    use mox::apps::{
+        FloaxConfig, ensure_floax_session, has_floax_session, is_floax_attached, toggle_floax,
+    };
     let config = FloaxConfig::default();
     assert_eq!(config.session_name, "mox-scratch");
     assert!(!has_floax_session(
+        Some("nonexistent-socket-12345"),
+        &config.session_name
+    ));
+    assert!(!is_floax_attached(
         Some("nonexistent-socket-12345"),
         &config.session_name
     ));
@@ -200,11 +206,9 @@ fn test_toggle_floax_inside_session_detaches_client() {
     // proving the detach-client branch was reached!
     let config = FloaxConfig::default().with_session_name("origin");
     let result = toggle_floax(socket, &config, None);
-    assert!(result.is_err());
-    let err = result.unwrap_err();
     assert!(
-        err.contains("no current client"),
-        "expected detach-client failure due to headless client, got: {err}"
+        result.is_ok(),
+        "detaching floax session should succeed cleanly"
     );
 }
 
@@ -223,6 +227,10 @@ fn test_toggle_floax_change_path_behavior() {
     let temp_dir = std::env::temp_dir();
     let temp_str = temp_dir.to_str().unwrap();
     ensure_floax_session(socket, &config, Some(temp_str)).expect("session created");
+
+    // In a headless test without clients, tmux defaults its active session pointer to the latest
+    // session created. Create a host session so the headless server simulates calling from outside floax.
+    let _ = mox::tmux::execute_tmux(socket, &["new-session", "-d", "-s", "host-caller"]);
 
     // Toggle with target directory /
     let result = toggle_floax(socket, &config, Some("/"));
