@@ -444,7 +444,7 @@ fn generate_table_bindings(
                     ));
                 }
                 KeyAction::TrackToggle => {
-                    let command = format!("{} track toggle", super::shell_quote(bin_path));
+                    let command = format!("{} track switch", super::shell_quote(bin_path));
                     lines.push(format!(
                         "bind-key -T {table_name} {} run-shell {}",
                         child.key,

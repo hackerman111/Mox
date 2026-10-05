@@ -411,14 +411,42 @@ pub fn run(command: Commands) -> Result<(), String> {
                 crate::apps::untrack_window(socket.as_deref(), window.as_deref()).map(|_| ())
             }
             TrackCommand::Toggle { window } => {
-                if let Some(w) = window {
-                    crate::apps::toggle_tracked_window(socket.as_deref(), Some(&w))
+                let tracked = if let Some(w) = window {
+                    let is_tracked = crate::apps::is_window_tracked(socket.as_deref(), Some(&w))?;
+                    if is_tracked {
+                        crate::apps::untrack_window(socket.as_deref(), Some(&w))?;
+                        false
+                    } else {
+                        crate::apps::track_window(socket.as_deref(), Some(&w))?;
+                        true
+                    }
                 } else {
-                    crate::apps::toggle_current_window_tracking(socket.as_deref()).map(|_| ())
-                }
+                    crate::apps::toggle_current_window_tracking(socket.as_deref())?
+                };
+                let win_info = crate::tmux::execute_tmux(
+                    socket.as_deref(),
+                    &["display-message", "-p", "#{window_name} (#{window_id})"],
+                )
+                .unwrap_or_default();
+                let msg = if tracked {
+                    format!("Tracked window {}", win_info.trim())
+                } else {
+                    format!("Untracked window {}", win_info.trim())
+                };
+                let _ = crate::tmux::execute_tmux(socket.as_deref(), &["display-message", &msg]);
+                println!("{msg}");
+                Ok(())
             }
             TrackCommand::Switch { window } => {
-                crate::apps::toggle_tracked_window(socket.as_deref(), window.as_deref())
+                if let Err(e) =
+                    crate::apps::toggle_tracked_window(socket.as_deref(), window.as_deref())
+                {
+                    let msg = format!("Mox: {e}");
+                    let _ =
+                        crate::tmux::execute_tmux(socket.as_deref(), &["display-message", &msg]);
+                    return Err(e);
+                }
+                Ok(())
             }
             TrackCommand::List => {
                 let list = crate::apps::list_tracked_windows(socket.as_deref())?;

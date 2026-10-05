@@ -260,11 +260,20 @@ fn test_navigator_exits_modal_mode() {
 
     let mox_root_t = script
         .iter()
-        .find(|l| l.contains("bind-key -T mox t"))
+        .find(|l| l.contains("bind-key -T mox t "))
         .expect("mox t binding missing");
     assert!(
-        mox_root_t.contains("track toggle"),
-        "must contain track toggle: {mox_root_t}"
+        mox_root_t.contains("track switch"),
+        "must contain track switch: {mox_root_t}"
+    );
+
+    let mox_root_shift_t = script
+        .iter()
+        .find(|l| l.contains("bind-key -T mox T "))
+        .expect("mox T binding missing");
+    assert!(
+        mox_root_shift_t.contains("track toggle"),
+        "must contain track toggle: {mox_root_shift_t}"
     );
 }
 
