@@ -2,6 +2,7 @@ pub mod actions;
 pub mod agent;
 pub mod cli;
 pub mod clipboard;
+pub mod config;
 pub mod editor;
 pub mod extract;
 pub mod flash;
