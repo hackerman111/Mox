@@ -169,13 +169,39 @@ fn test_floax_session_lifecycle_and_options() {
         .expect("idempotent ensure session succeeded");
     assert!(has_floax_session(socket, &config.session_name));
 
-    // Verify tmux options status is off and detach-on-destroy is on
+    // Verify tmux options status is on, detach-on-destroy is on, and pane borders are configured
     let status_opt = mox::tmux::execute_tmux(
         socket,
         &["show-option", "-t", &config.session_name, "-qv", "status"],
     )
     .expect("get status option");
-    assert_eq!(status_opt, "off");
+    assert_eq!(status_opt.trim(), "on");
+
+    let border_status = mox::tmux::execute_tmux(
+        socket,
+        &[
+            "show-option",
+            "-t",
+            &config.session_name,
+            "-qv",
+            "pane-border-status",
+        ],
+    )
+    .expect("get pane-border-status option");
+    assert_eq!(border_status.trim(), "top");
+
+    let border_fmt = mox::tmux::execute_tmux(
+        socket,
+        &[
+            "show-option",
+            "-t",
+            &config.session_name,
+            "-qv",
+            "pane-border-format",
+        ],
+    )
+    .expect("get pane-border-format option");
+    assert!(border_fmt.contains("#P"));
 
     let detach_opt = mox::tmux::execute_tmux(
         socket,
@@ -188,13 +214,14 @@ fn test_floax_session_lifecycle_and_options() {
         ],
     )
     .expect("get detach-on-destroy option");
-    assert_eq!(detach_opt, "on");
+    assert_eq!(detach_opt.trim(), "on");
 }
 
 #[test]
 fn test_apps_module_reexports() {
     use mox::apps::{
-        FloaxConfig, ensure_floax_session, has_floax_session, is_floax_attached, toggle_floax,
+        FloaxConfig, apply_floax_session_options, ensure_floax_session, has_floax_session,
+        is_floax_attached, toggle_floax,
     };
     let config = FloaxConfig::default();
     assert_eq!(config.session_name, "mox-scratch");
@@ -207,6 +234,7 @@ fn test_apps_module_reexports() {
         &config.session_name
     ));
     let _ = ensure_floax_session;
+    let _ = apply_floax_session_options;
     let _ = toggle_floax;
 }
 

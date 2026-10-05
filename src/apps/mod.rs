@@ -7,7 +7,8 @@ pub mod tracking;
 pub mod ui;
 
 pub use floax::{
-    FloaxConfig, ensure_floax_session, has_floax_session, is_floax_attached, toggle_floax,
+    FloaxConfig, apply_floax_session_options, ensure_floax_session, has_floax_session,
+    is_floax_attached, toggle_floax,
 };
 pub use runner::{check_binary, find_existing_pane, run_app};
 pub use tracking::{

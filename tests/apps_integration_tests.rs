@@ -70,13 +70,30 @@ fn test_floax_persistent_scratchpad_integration() {
         "has_floax_session must be true after ensure"
     );
 
-    // 3. Verify mox-scratch session options: status == off and detach-on-destroy == on
+    // 3. Verify mox-scratch session options: status == on, pane-border-status == top, and detach-on-destroy == on
     let status_opt = execute_tmux(
         socket,
         &["show-option", "-t", &config.session_name, "-qv", "status"],
     )
     .expect("get status option");
-    assert_eq!(status_opt.trim(), "off", "status option must be off");
+    assert_eq!(status_opt.trim(), "on", "status option must be on");
+
+    let border_status = execute_tmux(
+        socket,
+        &[
+            "show-option",
+            "-t",
+            &config.session_name,
+            "-qv",
+            "pane-border-status",
+        ],
+    )
+    .expect("get pane-border-status option");
+    assert_eq!(
+        border_status.trim(),
+        "top",
+        "pane-border-status option must be top"
+    );
 
     let detach_opt = execute_tmux(
         socket,

@@ -123,6 +123,92 @@ pub fn has_floax_session(socket: Option<&str>, session_name: &str) -> bool {
     execute_tmux(socket, &["has-session", "-t", session_name]).is_ok()
 }
 
+/// Apply tmux session options (status bar, detach-on-destroy, and pane border formatting)
+/// to the floax session.
+pub fn apply_floax_session_options(
+    socket: Option<&str>,
+    config: &FloaxConfig,
+) -> Result<(), String> {
+    execute_tmux(
+        socket,
+        &[
+            "set-option",
+            "-t",
+            &config.session_name,
+            "detach-on-destroy",
+            "on",
+        ],
+    )?;
+
+    if config.show_status {
+        execute_tmux(
+            socket,
+            &["set-option", "-t", &config.session_name, "status", "on"],
+        )?;
+    } else {
+        execute_tmux(
+            socket,
+            &["set-option", "-t", &config.session_name, "status", "off"],
+        )?;
+    }
+
+    if config.show_pane_borders {
+        let _ = execute_tmux(
+            socket,
+            &[
+                "set-option",
+                "-t",
+                &config.session_name,
+                "pane-border-status",
+                &config.pane_border_position,
+            ],
+        );
+        let _ = execute_tmux(
+            socket,
+            &[
+                "set-option",
+                "-t",
+                &config.session_name,
+                "pane-border-lines",
+                "rounded",
+            ],
+        );
+        let _ = execute_tmux(
+            socket,
+            &[
+                "set-option",
+                "-t",
+                &config.session_name,
+                "pane-border-format",
+                " #{?pane_active,#[fg=cyan,bold]● Pane #P: #{pane_current_command}#[default],#[fg=brightblack]○ Pane #P: #{pane_current_command}#[default]} ",
+            ],
+        );
+        let _ = execute_tmux(
+            socket,
+            &[
+                "set-option",
+                "-t",
+                &config.session_name,
+                "pane-active-border-style",
+                "fg=cyan,bold",
+            ],
+        );
+    } else {
+        let _ = execute_tmux(
+            socket,
+            &[
+                "set-option",
+                "-t",
+                &config.session_name,
+                "pane-border-status",
+                "off",
+            ],
+        );
+    }
+
+    Ok(())
+}
+
 /// Ensure that the floax tmux session exists, spawning it in the background if necessary.
 pub fn ensure_floax_session(
     socket: Option<&str>,
@@ -130,6 +216,7 @@ pub fn ensure_floax_session(
     cwd: Option<&str>,
 ) -> Result<(), String> {
     if has_floax_session(socket, &config.session_name) {
+        apply_floax_session_options(socket, config)?;
         return Ok(());
     }
 
@@ -149,20 +236,7 @@ pub fn ensure_floax_session(
             &target_cwd,
         ],
     )?;
-    execute_tmux(
-        socket,
-        &["set-option", "-t", &config.session_name, "status", "off"],
-    )?;
-    execute_tmux(
-        socket,
-        &[
-            "set-option",
-            "-t",
-            &config.session_name,
-            "detach-on-destroy",
-            "on",
-        ],
-    )?;
+    apply_floax_session_options(socket, config)?;
 
     Ok(())
 }
@@ -234,6 +308,7 @@ pub fn toggle_floax(
     }
 
     // 4. Build and run display-popup:
+    apply_floax_session_options(socket, config)?;
     let attach_cmd = config.build_attach_command(socket);
     execute_tmux(
         socket,
