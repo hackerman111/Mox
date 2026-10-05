@@ -73,6 +73,26 @@ fn test_floax_config_custom_builder_options() {
 }
 
 #[test]
+fn test_default_floax_config_ui_values() {
+    let config = FloaxConfig::default();
+    assert!(config.show_status);
+    assert!(config.show_pane_borders);
+    assert_eq!(config.pane_border_position, "top");
+}
+
+#[test]
+fn test_floax_config_ui_builder_options() {
+    let custom = FloaxConfig::default()
+        .with_status(false)
+        .with_pane_borders(false)
+        .with_pane_border_position("bottom");
+
+    assert!(!custom.show_status);
+    assert!(!custom.show_pane_borders);
+    assert_eq!(custom.pane_border_position, "bottom");
+}
+
+#[test]
 fn test_command_generation_for_popup_attach() {
     let config = FloaxConfig::default();
 

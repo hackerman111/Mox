@@ -20,6 +20,9 @@ pub struct FloaxConfig {
     pub width: String,
     pub height: String,
     pub change_path: bool,
+    pub show_status: bool,
+    pub show_pane_borders: bool,
+    pub pane_border_position: String,
 }
 
 impl Default for FloaxConfig {
@@ -30,6 +33,9 @@ impl Default for FloaxConfig {
             width: DEFAULT_FLOAX_WIDTH.to_string(),
             height: DEFAULT_FLOAX_HEIGHT.to_string(),
             change_path: false,
+            show_status: true,
+            show_pane_borders: true,
+            pane_border_position: "top".to_string(),
         }
     }
 }
@@ -63,6 +69,21 @@ impl FloaxConfig {
 
     pub fn with_change_path(mut self, change_path: bool) -> Self {
         self.change_path = change_path;
+        self
+    }
+
+    pub fn with_status(mut self, show_status: bool) -> Self {
+        self.show_status = show_status;
+        self
+    }
+
+    pub fn with_pane_borders(mut self, show_pane_borders: bool) -> Self {
+        self.show_pane_borders = show_pane_borders;
+        self
+    }
+
+    pub fn with_pane_border_position(mut self, position: impl Into<String>) -> Self {
+        self.pane_border_position = position.into();
         self
     }
 
