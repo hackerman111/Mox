@@ -3,10 +3,15 @@
 //! Provides configuration models, TOML parsing, and default settings
 //! for theming, status bar layouts, and key widgets.
 
+pub mod loader;
 pub mod model;
 pub mod status;
 pub mod theme;
 
+pub use loader::{
+    apply_tmux_overrides, apply_tmux_server_overrides, default_config_path, default_toml,
+    load_config, parse_config_str,
+};
 pub use model::{
     ClockConfig, Config, CustomThemeConfig, ModeIcons, ModeIndicatorConfig, ModeLabels,
     SegmentConfig, SegmentKind, SeparatorStyle, StatusConfig, WindowsConfig,
