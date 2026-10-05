@@ -1,8 +1,10 @@
 //! Application management, launching, and window tracking.
 
+pub mod floax;
 pub mod model;
 pub mod runner;
 
+pub use floax::{FloaxConfig, ensure_floax_session, has_floax_session, toggle_floax};
 pub use runner::{check_binary, find_existing_pane, run_app};
 
 /// Open or focus LazyGit in the current tmux session (facade delegating to `run_app`).
