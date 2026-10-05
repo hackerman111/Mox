@@ -156,8 +156,8 @@ pub fn build_default_keymap() -> KeyNode {
         ),
         KeyNode::new_action(
             "s",
-            "tree navigator",
-            KeyAction::Navigator,
+            "split horizontal",
+            KeyAction::Tmux("split-window -v -c \"#{pane_current_path}\"".into()),
         ),
         KeyNode::new_branch("S", "session menu", session_children),
         KeyNode::new_action("a", "apps panel", KeyAction::AppsPanel),

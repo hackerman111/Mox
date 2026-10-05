@@ -86,6 +86,16 @@ fn test_sticky_window_and_resize_modes() {
 
     let window_node = root.find_child("w").expect("Window mode missing");
     assert!(window_node.sticky, "Window mode must be sticky");
+    let split_h = window_node
+        .find_child("s")
+        .expect("split horizontal missing in window mode");
+    assert_eq!(split_h.label, "split horizontal");
+    assert_eq!(
+        split_h.action,
+        Some(KeyAction::Tmux(
+            "split-window -v -c \"#{pane_current_path}\"".into()
+        ))
+    );
 
     let resize_node = root.find_child("r").expect("Resize mode missing");
     assert!(resize_node.sticky, "Resize mode must be sticky");
@@ -214,30 +224,30 @@ fn test_navigator_exits_modal_mode() {
     let root = build_default_keymap();
     let script = generate_init_script(&root, "M-m", "mox", None);
 
-    let mox_w_s = script
+    let mox_w_s_t = script
         .iter()
-        .find(|l| l.contains("bind-key -T mox_w s"))
-        .expect("mox_w s binding missing");
+        .find(|l| l.contains("bind-key -T mox_w_S t"))
+        .expect("mox_w_S t binding missing");
     assert!(
-        mox_w_s.contains("set-option key-table root"),
-        "navigator must exit to root key-table: {mox_w_s}"
+        mox_w_s_t.contains("set-option key-table root"),
+        "navigator must exit to root key-table: {mox_w_s_t}"
     );
     assert!(
-        mox_w_s.contains("nav"),
-        "must contain nav command: {mox_w_s}"
+        mox_w_s_t.contains("nav"),
+        "must contain nav command: {mox_w_s_t}"
     );
 
-    let mox_s_s = script
+    let mox_w_s_s = script
         .iter()
         .find(|l| l.contains("bind-key -T mox_w_S s"))
         .expect("mox_w_S s binding missing");
     assert!(
-        mox_s_s.contains("set-option key-table root"),
-        "navigator must exit to root key-table: {mox_s_s}"
+        mox_w_s_s.contains("set-option key-table root"),
+        "navigator must exit to root key-table: {mox_w_s_s}"
     );
     assert!(
-        mox_s_s.contains("nav"),
-        "must contain nav command: {mox_s_s}"
+        mox_w_s_s.contains("nav"),
+        "must contain nav command: {mox_w_s_s}"
     );
 
     let mox_root_a = script
