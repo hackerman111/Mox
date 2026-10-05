@@ -93,6 +93,30 @@ pub enum Commands {
         #[arg(long, global = true)]
         socket: Option<String>,
     },
+    Apps {
+        #[arg(long)]
+        socket: Option<String>,
+        #[arg(long)]
+        popup: bool,
+    },
+    Floax {
+        #[arg(long)]
+        socket: Option<String>,
+        #[arg(long)]
+        cwd: Option<String>,
+    },
+    Track {
+        #[command(subcommand)]
+        command: TrackCommand,
+        #[arg(long, global = true)]
+        socket: Option<String>,
+    },
+    App {
+        #[command(subcommand)]
+        command: AppCommand,
+        #[arg(long, global = true)]
+        socket: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -168,6 +192,39 @@ pub enum LogCommand {
     Sink {
         path: PathBuf,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum TrackCommand {
+    Add {
+        #[arg(long)]
+        window: Option<String>,
+    },
+    Remove {
+        #[arg(long)]
+        window: Option<String>,
+    },
+    Toggle {
+        #[arg(long)]
+        window: Option<String>,
+    },
+    Switch {
+        #[arg(long)]
+        window: Option<String>,
+    },
+    List,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum AppCommand {
+    Run {
+        name: String,
+        #[arg(long)]
+        cwd: Option<String>,
+        #[arg(long)]
+        window: bool,
+    },
+    List,
 }
 
 pub fn run(command: Commands) -> Result<(), String> {
@@ -331,6 +388,60 @@ pub fn run(command: Commands) -> Result<(), String> {
                 crate::config::loader::apply_tmux_server_overrides(&mut cfg, socket.as_deref());
                 let toml_str = toml::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
                 print!("{toml_str}");
+                Ok(())
+            }
+        },
+        Commands::Apps { socket, popup } => {
+            if popup {
+                launch(socket.as_deref(), "apps")
+            } else {
+                crate::apps::run_apps_panel(socket.as_deref(), None)
+            }
+        }
+        Commands::Floax { socket, cwd } => crate::apps::toggle_floax(
+            socket.as_deref(),
+            &crate::apps::floax::FloaxConfig::default(),
+            cwd.as_deref(),
+        ),
+        Commands::Track { command, socket } => match command {
+            TrackCommand::Add { window } => {
+                crate::apps::track_window(socket.as_deref(), window.as_deref()).map(|_| ())
+            }
+            TrackCommand::Remove { window } => {
+                crate::apps::untrack_window(socket.as_deref(), window.as_deref()).map(|_| ())
+            }
+            TrackCommand::Toggle { window } => {
+                if let Some(w) = window {
+                    crate::apps::toggle_tracked_window(socket.as_deref(), Some(&w))
+                } else {
+                    crate::apps::toggle_current_window_tracking(socket.as_deref()).map(|_| ())
+                }
+            }
+            TrackCommand::Switch { window } => {
+                crate::apps::toggle_tracked_window(socket.as_deref(), window.as_deref())
+            }
+            TrackCommand::List => {
+                let list = crate::apps::list_tracked_windows(socket.as_deref())?;
+                for w in list {
+                    println!("{}\t{}\t{}", w.id, w.name, w.session_id);
+                }
+                Ok(())
+            }
+        },
+        Commands::App { command, socket } => match command {
+            AppCommand::Run { name, cwd, window } => {
+                let cfg = crate::config::loader::load_config(None);
+                if let Some(app) = cfg.apps.iter().find(|a| a.name == name) {
+                    crate::apps::run_app(socket.as_deref(), app, cwd.as_deref(), window)
+                } else {
+                    Err(format!("App '{name}' not found in configuration"))
+                }
+            }
+            AppCommand::List => {
+                let cfg = crate::config::loader::load_config(None);
+                for app in &cfg.apps {
+                    println!("{}\t{}\t{}", app.name, app.command, app.title);
+                }
                 Ok(())
             }
         },
