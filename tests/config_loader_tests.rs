@@ -264,3 +264,20 @@ fn test_apply_tmux_server_overrides_graceful() {
     apply_tmux_server_overrides(&mut config, Some("nonexistent_mox_test_socket_9999"));
     assert_eq!(config, Config::default());
 }
+
+#[test]
+fn test_apply_tmux_overrides_status_position() {
+    let mut config = Config::default();
+    assert_eq!(config.status.position, "bottom");
+
+    let mut options = HashMap::new();
+    options.insert("status-position", "top".to_string());
+    apply_tmux_overrides(&mut config, |key| options.get(key).cloned());
+    assert_eq!(config.status.position, "top");
+
+    // @mox_status_position has precedence over status-position
+    options.insert("@mox_status_position", "bottom".to_string());
+    apply_tmux_overrides(&mut config, |key| options.get(key).cloned());
+    assert_eq!(config.status.position, "bottom");
+}
+

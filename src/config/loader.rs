@@ -204,6 +204,18 @@ where
             config.clock.style_12h = false;
         }
     }
+
+    if let Some(val) = get_option("@mox_status_position") {
+        let trimmed = val.trim().to_lowercase();
+        if trimmed == "top" || trimmed == "bottom" {
+            config.status.position = trimmed;
+        }
+    } else if let Some(val) = get_option("status-position") {
+        let trimmed = val.trim().to_lowercase();
+        if trimmed == "top" || trimmed == "bottom" {
+            config.status.position = trimmed;
+        }
+    }
 }
 
 /// Queries tmux global options via `show-option -gqv` and applies overrides to [`Config`].
