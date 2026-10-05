@@ -351,5 +351,19 @@ show_flags = true
 # warning = "#ebcb8b"
 # success = "#a3be8c"
 # info = "#81a1c1"
+
+# ------------------------------------------------------------------------------
+# Applications & Quick Launchers
+# ------------------------------------------------------------------------------
+# Built-in apps "lazygit" and "btop" are enabled by default.
+# Additional applications can be configured below:
+# [[apps]]
+# name = "lazygit"
+# title = "LazyGit"
+# command = "lazygit"
+# key = "G"
+# mode = { type = "popup", width = "85%", height = "85%" }
+# focus_existing = true
+# check_binary = true
 "##
 }

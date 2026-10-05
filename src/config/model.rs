@@ -4,6 +4,7 @@
 //! with sensible defaults for themes, status bar widgets, clock, mode indicators,
 //! and window styling.
 
+use crate::apps::model::default_apps;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -33,6 +34,10 @@ pub struct Config {
     /// Optional custom theme color overrides.
     #[serde(default, alias = "theme_custom", alias = "theme.custom")]
     pub custom_theme: Option<CustomThemeConfig>,
+
+    /// Configured applications.
+    #[serde(default = "default_apps")]
+    pub apps: Vec<crate::apps::model::AppConfig>,
 }
 
 impl Config {
@@ -51,6 +56,7 @@ impl Default for Config {
             mode_indicator: ModeIndicatorConfig::default(),
             windows: WindowsConfig::default(),
             custom_theme: None,
+            apps: default_apps(),
         }
     }
 }
