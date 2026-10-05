@@ -62,18 +62,29 @@ pub fn tmux_color(color: Color) -> String {
     }
 }
 
+use crate::config::ModeIndicatorConfig;
+
+/// Replaces the `#{tmux_mode_indicator}` placeholder with the rendered mode indicator string.
+pub fn replace_mode_indicator_placeholder(s: &str, indicator: &str) -> String {
+    s.replace("#{tmux_mode_indicator}", indicator)
+}
+
+/// Renders tmux conditional string for the mode indicator using provided configuration and theme.
 /// Priority is client suspension, selection/copy, resize, sync, prefix, agent, normal.
-pub fn tmux_indicator(theme: &Theme) -> String {
+pub fn tmux_indicator_with_config(config: &ModeIndicatorConfig, theme: &Theme) -> String {
     let badge = |mode: Mode| {
         let (icon, label) = match mode {
-            Mode::Normal => ("●", "NORMAL"),
-            Mode::Prefix => ("◆", "PREFIX"),
-            Mode::Visual => ("◈", "VISUAL"),
-            Mode::Agent => ("▲", "AGENT"),
-            Mode::Copy => ("⎘", "COPY"),
-            Mode::Resize => ("↕", "RESIZE"),
-            Mode::Sync => ("⇄", "SYNC"),
-            Mode::Suspend => ("⏸", "SUSPEND"),
+            Mode::Normal => (config.icons.normal.as_str(), config.labels.normal.as_str()),
+            Mode::Prefix => (config.icons.prefix.as_str(), config.labels.prefix.as_str()),
+            Mode::Visual => (config.icons.visual.as_str(), config.labels.visual.as_str()),
+            Mode::Agent => (config.icons.agent.as_str(), config.labels.agent.as_str()),
+            Mode::Copy => (config.icons.copy.as_str(), config.labels.copy.as_str()),
+            Mode::Resize => (config.icons.resize.as_str(), config.labels.resize.as_str()),
+            Mode::Sync => (config.icons.sync.as_str(), config.labels.sync.as_str()),
+            Mode::Suspend => (
+                config.icons.suspend.as_str(),
+                config.labels.suspend.as_str(),
+            ),
         };
         format!(
             "#[fg={}]#[bg={}]#[bold] {icon} {label} #[default] ",
@@ -97,6 +108,11 @@ pub fn tmux_indicator(theme: &Theme) -> String {
         value = format!("#{{?{condition},{},{value}}}", badge(mode));
     }
     value
+}
+
+/// Priority is client suspension, selection/copy, resize, sync, prefix, agent, normal.
+pub fn tmux_indicator(theme: &Theme) -> String {
+    tmux_indicator_with_config(&ModeIndicatorConfig::default(), theme)
 }
 
 /// Renders a standardized mode badge with optional sticky indicator.
