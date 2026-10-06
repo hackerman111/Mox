@@ -68,15 +68,14 @@ pub fn render_navigator_with_theme<W: Write>(
 
         if item_idx < items.len() {
             let item = &items[item_idx];
-            let (depth, collapsed, label, active) =
-                tree_row_parts(item, app.picker.query.is_empty());
+            let parts = tree_row_parts(item, app.picker.query.is_empty(), theme);
             let row = TreeRow {
-                depth,
-                is_collapsed: collapsed,
-                icon: None,
-                label: &label,
-                badge: None,
-                is_active: active,
+                depth: parts.depth,
+                is_collapsed: parts.collapsed,
+                icon: parts.icon,
+                label: &parts.label,
+                badge: parts.badge,
+                is_active: parts.active,
                 is_selected: item_idx == app.picker.selected,
             };
             let _ = render_tree_row(out, &row, tree_width, theme);
@@ -131,40 +130,58 @@ pub fn render_navigator_with_theme<W: Write>(
     Ok(())
 }
 
-fn tree_row_parts(
+pub struct NavTreeRowParts {
+    pub depth: usize,
+    pub collapsed: Option<bool>,
+    pub icon: Option<(&'static str, Color)>,
+    pub label: String,
+    pub badge: Option<(&'static str, Color)>,
+    pub active: bool,
+}
+
+pub fn tree_row_parts(
     item: &TreeItem<'_>,
     preserve_collapse: bool,
-) -> (usize, Option<bool>, String, bool) {
+    theme: &Theme,
+) -> NavTreeRowParts {
     match item {
-        TreeItem::Session(session) => (
-            0,
-            Some(preserve_collapse && session.collapsed),
-            session.name.clone(),
-            session.active,
-        ),
-        TreeItem::Window { window, .. } => (
-            1,
-            Some(preserve_collapse && window.collapsed),
-            format!(
-                "{}: {}{}",
-                window.index,
-                window.name,
-                if window.is_agent { " [AI]" } else { "" }
-            ),
-            window.active,
-        ),
+        TreeItem::Session(session) => NavTreeRowParts {
+            depth: 0,
+            collapsed: Some(preserve_collapse && session.collapsed),
+            icon: Some(("󰍹 ", theme.accent)),
+            label: session.name.clone(),
+            badge: None,
+            active: session.active,
+        },
+        TreeItem::Window { window, .. } => {
+            let (icon, badge) = if window.is_agent {
+                (("󰚩 ", theme.mode_agent), Some(("[AI]", theme.mode_agent)))
+            } else {
+                (("󰖲 ", theme.warning), None)
+            };
+            NavTreeRowParts {
+                depth: 1,
+                collapsed: Some(preserve_collapse && window.collapsed),
+                icon: Some(icon),
+                label: format!("{}: {}", window.index, window.name),
+                badge,
+                active: window.active,
+            }
+        }
         TreeItem::Pane { pane, .. } => {
             let title_info = if !pane.title.is_empty() && pane.title != pane.command {
                 format!(" [{}]", pane.title)
             } else {
                 String::new()
             };
-            (
-                2,
-                None,
-                format!("{} {}  {}{title_info}", pane.id, pane.command, pane.cwd),
-                pane.active,
-            )
+            NavTreeRowParts {
+                depth: 2,
+                collapsed: None,
+                icon: Some((" ", theme.fg)),
+                label: format!("{} {}  {}{title_info}", pane.id, pane.command, pane.cwd),
+                badge: None,
+                active: pane.active,
+            }
         }
     }
 }
@@ -213,5 +230,26 @@ pub fn item_color(item: &TreeItem, theme: &Theme) -> Color {
             }
         }
         TreeItem::Pane { .. } => theme.fg,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nav::model::{SessionInfo, TreeItem};
+
+    #[test]
+    fn test_tree_row_parts_populates_icons() {
+        let session = SessionInfo {
+            id: "$0".into(),
+            name: "main".into(),
+            active: true,
+            windows: vec![],
+            collapsed: false,
+        };
+        let item = TreeItem::Session(&session);
+        let theme = Theme::load(None);
+        let row_data = tree_row_parts(&item, true, &theme);
+        assert_eq!(row_data.icon.unwrap().0, "󰍹 ");
     }
 }
