@@ -188,7 +188,10 @@ pub fn render_tree_row<W: Write>(
 
     let active_marker = if row.is_active { " ●" } else { "" };
 
-    let mut line_buf = format!("{}{}{}{}{}", indent_str, fold_icon, icon_str, row.label, active_marker);
+    let mut line_buf = format!(
+        "{}{}{}{}{}",
+        indent_str, fold_icon, icon_str, row.label, active_marker
+    );
 
     if let Some((b_text, _)) = row.badge {
         line_buf.push_str(&format!(" {b_text}"));

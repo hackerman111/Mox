@@ -54,7 +54,7 @@ fn hidden_preview_cli_returns_bounded_json_for_files_and_directories() {
     assert!(output.status.success());
     assert_eq!(
         serde_json::from_slice::<Vec<String>>(&output.stdout).unwrap(),
-        vec!["a", "b"]
+        vec!["├──  a", "└──  b"]
     );
     fs::remove_dir_all(directory).unwrap();
 }

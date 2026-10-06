@@ -225,14 +225,9 @@ pub fn run_picker_extended(
 
             queue!(out, cursor::MoveTo(0, height.saturating_sub(1) as u16))
                 .map_err(|e| e.to_string())?;
-            let hints_msg = hints_override.unwrap_or("type: filter · ↑↓/C-j/k: select · Enter: accept · Esc: cancel");
-            render_hints(
-                &mut out,
-                hints_msg,
-                width,
-                &theme,
-            )
-            .map_err(|e| e.to_string())?;
+            let hints_msg = hints_override
+                .unwrap_or("type: filter · ↑↓/C-j/k: select · Enter: accept · Esc: cancel");
+            render_hints(&mut out, hints_msg, width, &theme).map_err(|e| e.to_string())?;
 
             out.flush().map_err(|e| e.to_string())?;
             needs_redraw = false;
@@ -249,17 +244,14 @@ pub fn run_picker_extended(
         }
         if let Event::Key(key) = event::read().map_err(|e| e.to_string())? {
             needs_redraw = true;
-            if key.kind == KeyEventKind::Press {
-                if let KeyCode::Char(c) = key.code {
-                    if (key.modifiers.contains(KeyModifiers::CONTROL)
-                        || key.modifiers.contains(KeyModifiers::ALT))
-                        && custom_chars.contains(&c)
-                    {
-                        if let Some(orig) = original {
-                            return Ok(PickerAction::Custom(orig, c));
-                        }
-                    }
-                }
+            if key.kind == KeyEventKind::Press
+                && let KeyCode::Char(c) = key.code
+                && (key.modifiers.contains(KeyModifiers::CONTROL)
+                    || key.modifiers.contains(KeyModifiers::ALT))
+                && custom_chars.contains(&c)
+                && let Some(orig) = original
+            {
+                return Ok(PickerAction::Custom(orig, c));
             }
             match state.input(key, state.indices.len(), true) {
                 Input::Changed => state.filter(
@@ -268,7 +260,11 @@ pub fn run_picker_extended(
                         .enumerate()
                         .map(|(i, item)| (i, item.label.as_str())),
                 ),
-                Input::Accept => return Ok(original.map(PickerAction::Selected).unwrap_or(PickerAction::Cancel)),
+                Input::Accept => {
+                    return Ok(original
+                        .map(PickerAction::Selected)
+                        .unwrap_or(PickerAction::Cancel));
+                }
                 Input::Cancel => return Ok(PickerAction::Cancel),
                 Input::None => {}
             }

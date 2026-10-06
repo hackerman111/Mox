@@ -48,16 +48,20 @@ pub fn build_snippet_preview(snippet: &Snippet) -> Vec<String> {
     lines
 }
 
+pub struct SnippetsViewState<'a> {
+    pub snippets: &'a [Snippet],
+    pub query: &'a str,
+    pub selected: usize,
+    pub offset: usize,
+    pub confirm_delete: Option<&'a str>,
+    pub prompt_input: Option<(&'a str, &'a str)>,
+    pub width: usize,
+    pub height: usize,
+}
+
 pub fn render_snippets_view<W: Write>(
     out: &mut W,
-    snippets: &[Snippet],
-    query: &str,
-    selected: usize,
-    offset: usize,
-    confirm_delete: Option<&str>,
-    prompt_input: Option<(&str, &str)>, // (prompt_title, current_buffer)
-    width: usize,
-    height: usize,
+    view: &SnippetsViewState<'_>,
     theme: &Theme,
 ) -> Result<(), String> {
     let _ = queue!(
@@ -67,17 +71,19 @@ pub fn render_snippets_view<W: Write>(
         SetForegroundColor(theme.fg)
     );
 
-    let list_width = (width * 55 / 100).max(35).min(width.saturating_sub(25));
-    let preview_width = width.saturating_sub(list_width);
-    let content_height = height.saturating_sub(4);
+    let list_width = (view.width * 55 / 100)
+        .max(35)
+        .min(view.width.saturating_sub(25));
+    let preview_width = view.width.saturating_sub(list_width);
+    let content_height = view.height.saturating_sub(4);
 
     // 1. Search Bar
     let _ = queue!(out, cursor::MoveTo(0, 0));
-    let count_badge = format!("{}/{}", snippets.len(), snippets.len());
+    let count_badge = format!("{}/{}", view.snippets.len(), view.snippets.len());
     let _ = render_prompt(
         out,
         "[SNIPPETS]",
-        query,
+        view.query,
         Some(&count_badge),
         list_width,
         theme,
@@ -90,12 +96,12 @@ pub fn render_snippets_view<W: Write>(
     // List rows
     for row in 0..content_height {
         let y = (row + 2) as u16;
-        let item_idx = offset + row;
+        let item_idx = view.offset + row;
         let _ = queue!(out, cursor::MoveTo(0, y));
 
-        if item_idx < snippets.len() {
-            let s = &snippets[item_idx];
-            let is_sel = item_idx == selected;
+        if item_idx < view.snippets.len() {
+            let s = &view.snippets[item_idx];
+            let is_sel = item_idx == view.selected;
 
             let (bg, fg) = if is_sel {
                 (theme.selection_bg, theme.selection_fg)
@@ -106,7 +112,11 @@ pub fn render_snippets_view<W: Write>(
             let tags_str = if !s.tags.is_empty() {
                 format!(
                     " [{}]",
-                    s.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" ")
+                    s.tags
+                        .iter()
+                        .map(|t| format!("#{t}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
                 )
             } else {
                 String::new()
@@ -119,15 +129,11 @@ pub fn render_snippets_view<W: Write>(
             let _ = queue!(
                 out,
                 SetBackgroundColor(bg),
-                SetForegroundColor(if is_sel {
-                    theme.selection_fg
-                } else {
-                    fg
-                }),
+                SetForegroundColor(if is_sel { theme.selection_fg } else { fg }),
                 Print(&line),
                 ResetColor
             );
-        } else if snippets.is_empty() && row == 0 {
+        } else if view.snippets.is_empty() && row == 0 {
             let _ = render_empty_state(out, "No matching commands", list_width, theme);
         } else {
             let _ = queue!(out, Print(" ".repeat(list_width)));
@@ -136,7 +142,7 @@ pub fn render_snippets_view<W: Write>(
 
     // 2. Right Preview Panel
     if preview_width > 0 {
-        let preview_lines = if let Some(selected_snippet) = snippets.get(selected) {
+        let preview_lines = if let Some(selected_snippet) = view.snippets.get(view.selected) {
             build_snippet_preview(selected_snippet)
         } else {
             vec!["No command selected".to_string()]
@@ -150,37 +156,37 @@ pub fn render_snippets_view<W: Write>(
                 x: list_width,
                 y: 0,
                 width: preview_width,
-                height: height.saturating_sub(2),
+                height: view.height.saturating_sub(2),
             },
             theme,
         );
     }
 
     // 3. Footer
-    let footer_y = (height.saturating_sub(2)) as u16;
+    let footer_y = (view.height.saturating_sub(2)) as u16;
     let _ = queue!(out, cursor::MoveTo(0, footer_y));
-    let _ = draw_divider(out, width, theme);
+    let _ = draw_divider(out, view.width, theme);
 
-    let status_y = (height.saturating_sub(1)) as u16;
+    let status_y = (view.height.saturating_sub(1)) as u16;
     let _ = queue!(out, cursor::MoveTo(0, status_y));
 
-    if let Some(target) = confirm_delete {
+    if let Some(target) = view.confirm_delete {
         let prompt_text = format!("Delete snippet '{target}'? (y/n)");
         let _ = render_confirm(out, &prompt_text, theme);
         let _ = queue!(out, Clear(ClearType::UntilNewLine));
-    } else if let Some((p_title, p_buf)) = prompt_input {
+    } else if let Some((p_title, p_buf)) = view.prompt_input {
         let prompt_str = format!(" {p_title}: {p_buf}_ ");
         let _ = queue!(
             out,
             SetBackgroundColor(theme.warning),
             SetForegroundColor(theme.bg),
-            Print(truncate_or_pad(&prompt_str, width)),
+            Print(truncate_or_pad(&prompt_str, view.width)),
             ResetColor,
             Clear(ClearType::UntilNewLine)
         );
     } else {
         let hints = "Enter:Run │ y:Yank │ a:Add │ d:Delete │ /:Search │ Esc:Exit";
-        let _ = render_hints(out, hints, width, theme);
+        let _ = render_hints(out, hints, view.width, theme);
         let _ = queue!(out, Clear(ClearType::UntilNewLine));
     }
 

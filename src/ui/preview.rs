@@ -76,15 +76,15 @@ fn collect_directory_tree(
     let Ok(entries_read) = std::fs::read_dir(dir) else {
         return Ok(());
     };
-    let mut items = entries_read
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
+    let mut items = entries_read.filter_map(Result::ok).collect::<Vec<_>>();
 
     // Sort: directories first, then alphabetical by name
     items.sort_by(|a, b| {
         let a_is_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
         let b_is_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
-        b_is_dir.cmp(&a_is_dir).then_with(|| a.file_name().cmp(&b.file_name()))
+        b_is_dir
+            .cmp(&a_is_dir)
+            .then_with(|| a.file_name().cmp(&b.file_name()))
     });
 
     let count = items.len();
@@ -107,7 +107,14 @@ fn collect_directory_tree(
 
         if is_dir && depth + 1 < max_depth {
             let next_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
-            collect_directory_tree(&entry.path(), &next_prefix, depth + 1, max_depth, max_lines, out)?;
+            collect_directory_tree(
+                &entry.path(),
+                &next_prefix,
+                depth + 1,
+                max_depth,
+                max_lines,
+                out,
+            )?;
         }
     }
     Ok(())

@@ -95,6 +95,7 @@ fn test_tree_row_rendering() {
     let session_row = TreeRow {
         depth: 0,
         is_collapsed: Some(false),
+        icon: None,
         label: "dev",
         badge: None,
         is_active: true,
@@ -102,12 +103,13 @@ fn test_tree_row_rendering() {
     };
     assert!(render_tree_row(&mut buf, &session_row, 30, &theme).is_ok());
     let output = String::from_utf8_lossy(&buf);
-    assert!(output.contains("▼ dev *"));
+    assert!(output.contains("▼ dev ●"));
 
     let mut buf_win = Vec::new();
     let win_row = TreeRow {
         depth: 1,
         is_collapsed: Some(true),
+        icon: None,
         label: "1: editor",
         badge: Some(("[AI]", theme.mode_agent)),
         is_active: false,
@@ -218,6 +220,7 @@ fn test_narrow_terminals_no_panic() {
         let tree_row = TreeRow {
             depth: 2,
             is_collapsed: None,
+            icon: None,
             label: "deeply_nested_pane_with_lots_of_text",
             badge: None,
             is_active: false,

@@ -502,10 +502,16 @@ mod tests {
     fn test_keymap_contains_snippets_bindings() {
         let keymap = build_default_keymap();
         let root_c = keymap.children.iter().find(|n| n.key == "C");
-        assert!(root_c.is_some(), "Key 'C' must be bound to snippets in root table");
+        assert!(
+            root_c.is_some(),
+            "Key 'C' must be bound to snippets in root table"
+        );
 
         let goto = keymap.children.iter().find(|n| n.key == "g").unwrap();
         let goto_c = goto.children.iter().find(|n| n.key == "c");
-        assert!(goto_c.is_some(), "Key 'g c' must be bound to snippets in goto table");
+        assert!(
+            goto_c.is_some(),
+            "Key 'g c' must be bound to snippets in goto table"
+        );
     }
 }

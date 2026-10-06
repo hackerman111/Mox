@@ -67,7 +67,10 @@ pub(crate) fn discover(socket: Option<&str>, roots: &[PathBuf]) -> Result<Vec<Pr
     }
 
     let favorites_path = favorites_file().ok();
-    let favorites = favorites_path.as_deref().map(read_favorites).unwrap_or_default();
+    let favorites = favorites_path
+        .as_deref()
+        .map(read_favorites)
+        .unwrap_or_default();
     sort_projects_with_favorites(&mut projects, &favorites);
 
     Ok(projects)
@@ -84,7 +87,9 @@ pub fn run(socket: Option<&str>, roots: &[PathBuf]) -> Result<(), String> {
             &items,
             socket,
             &['f'],
-            Some("type: filter · ↑↓/C-j/k: select · C-f: favorite (★) · Enter: accept · Esc: cancel"),
+            Some(
+                "type: filter · ↑↓/C-j/k: select · C-f: favorite (★) · Enter: accept · Esc: cancel",
+            ),
         )? {
             crate::ui::picker::PickerAction::Selected(index) => {
                 activate(socket, &projects[index])?;
@@ -348,9 +353,7 @@ pub fn sort_projects_with_favorites(projects: &mut [Project], favorites: &HashSe
     for p in projects.iter_mut() {
         p.is_favorite = favorites.contains(&p.path);
     }
-    projects.sort_by(|a, b| {
-        b.is_favorite.cmp(&a.is_favorite)
-    });
+    projects.sort_by_key(|b| std::cmp::Reverse(b.is_favorite));
 }
 
 fn project_label(path: &Path) -> String {

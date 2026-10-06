@@ -27,7 +27,9 @@ pub fn default_snippets_path() -> Option<PathBuf> {
                 .join("snippets.toml"),
         );
     }
-    crate::state::directory().ok().map(|d| d.join("snippets.toml"))
+    crate::state::directory()
+        .ok()
+        .map(|d| d.join("snippets.toml"))
 }
 
 /// Built-in starter snippets.
@@ -64,7 +66,8 @@ pub fn default_snippets() -> Vec<Snippet> {
         Snippet {
             id: "curl-post-json".into(),
             title: "cURL POST JSON".into(),
-            command: "curl -X POST <url> -H \"Content-Type: application/json\" -d '<body:{}>'".into(),
+            command: "curl -X POST <url> -H \"Content-Type: application/json\" -d '<body:{}>'"
+                .into(),
             description: "Send HTTP POST request with JSON payload".into(),
             tags: vec!["curl".into(), "http".into(), "api".into()],
         },

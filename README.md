@@ -77,8 +77,9 @@ Press `M-m` to enter modal mode. Press `?` to see the available commands. `q` or
 | `v` or `[` | Scrollback and visual selection                 |
 | `e`        | Extract text from the pane                      |
 | `t` / `T`  | Tea timer                                       |
+| `C`        | Favorite terminal commands & navi snippets      |
 
-Mox also includes Vim-style copy and extract modes, pane selection, rename prompts, and pane/window/session actions. See the [modal command map](docs/tmux-modal-parity.md) and [visual navigation guide](docs/tmux-visual-navigation.md) for the full key reference.
+Mox also includes Vim-style copy and extract modes, pane selection, rename prompts, pane/window/session actions, modern hierarchical tree rendering (tmux navigator and directory previews), interactive navi-style command cheatsheets (`mox snippets`), and persistent favorite projects (`Ctrl+f` in `mox projects`). See the [modal command map](docs/tmux-modal-parity.md) and [visual navigation guide](docs/tmux-visual-navigation.md) for the full key reference.
 
 ## Development
 

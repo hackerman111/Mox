@@ -5,8 +5,8 @@ use super::storage::{load_snippets, save_snippets};
 use super::template::{TemplateParam, extract_parameters, substitute_parameters};
 use super::ui::render_snippets_view;
 use crate::tui::RawModeGuard;
-use crate::ui::theme::Theme;
 use crate::ui::Viewport;
+use crate::ui::theme::Theme;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{self, Clear, ClearType};
 use crossterm::{cursor, execute};
@@ -109,7 +109,12 @@ pub fn run_snippets_panel(socket: Option<&str>) -> Result<(), String> {
             };
 
             let prompt_data = match &mode {
-                AppMode::PromptParam { params, param_index, buf, .. } => {
+                AppMode::PromptParam {
+                    params,
+                    param_index,
+                    buf,
+                    ..
+                } => {
                     if let Some(param) = params.get(*param_index) {
                         let hint = match &param.default {
                             Some(def) => format!("Param <{}> (default: {def})", param.name),
@@ -134,18 +139,17 @@ pub fn run_snippets_panel(socket: Option<&str>) -> Result<(), String> {
 
             let prompt_ref = prompt_data.as_ref().map(|(t, b)| (t.as_str(), b.as_str()));
 
-            render_snippets_view(
-                &mut out,
-                &filtered,
-                &query,
+            let view_state = super::ui::SnippetsViewState {
+                snippets: &filtered,
+                query: &query,
                 selected,
                 offset,
-                confirm_str,
-                prompt_ref,
-                term_w,
-                term_h,
-                &theme,
-            )?;
+                confirm_delete: confirm_str,
+                prompt_input: prompt_ref,
+                width: term_w,
+                height: term_h,
+            };
+            render_snippets_view(&mut out, &view_state, &theme)?;
             needs_redraw = false;
         }
 
@@ -168,23 +172,17 @@ pub fn run_snippets_panel(socket: Option<&str>) -> Result<(), String> {
                 KeyCode::Up | KeyCode::Char('k') => {
                     selected = selected.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if list_len > 0 {
-                        selected = (selected + 1).min(list_len - 1);
-                    }
+                KeyCode::Down | KeyCode::Char('j') if list_len > 0 => {
+                    selected = (selected + 1).min(list_len - 1);
                 }
                 KeyCode::PageUp => {
                     selected = selected.saturating_sub(10);
                 }
-                KeyCode::PageDown => {
-                    if list_len > 0 {
-                        selected = (selected + 10).min(list_len - 1);
-                    }
+                KeyCode::PageDown if list_len > 0 => {
+                    selected = (selected + 10).min(list_len - 1);
                 }
-                KeyCode::Char('d') => {
-                    if !filtered.is_empty() {
-                        mode = AppMode::ConfirmDelete;
-                    }
+                KeyCode::Char('d') if !filtered.is_empty() => {
+                    mode = AppMode::ConfirmDelete;
                 }
                 KeyCode::Char('a') => {
                     mode = AppMode::AddWizard {
@@ -234,10 +232,8 @@ pub fn run_snippets_panel(socket: Option<&str>) -> Result<(), String> {
                 KeyCode::Up => {
                     selected = selected.saturating_sub(1);
                 }
-                KeyCode::Down => {
-                    if list_len > 0 {
-                        selected = (selected + 1).min(list_len - 1);
-                    }
+                KeyCode::Down if list_len > 0 => {
+                    selected = (selected + 1).min(list_len - 1);
                 }
                 KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                     query.push(c);
@@ -341,7 +337,11 @@ pub fn run_snippets_panel(socket: Option<&str>) -> Result<(), String> {
                                 .map(|c| if c.is_alphanumeric() { c } else { '-' })
                                 .collect::<String>();
                             let new_snippet = Snippet {
-                                id: if new_id.is_empty() { "custom-snippet".into() } else { new_id },
+                                id: if new_id.is_empty() {
+                                    "custom-snippet".into()
+                                } else {
+                                    new_id
+                                },
                                 title: title.clone(),
                                 command: command.clone(),
                                 description: description.clone(),

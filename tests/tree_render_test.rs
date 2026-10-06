@@ -35,7 +35,11 @@ fn test_local_directory_tree_formats_hierarchy() {
     let lines = mox::ui::preview::local_directory(&temp_dir).expect("loads directory tree");
     assert!(!lines.is_empty());
     assert!(lines.iter().any(|l| l.contains("sub") && l.contains("")));
-    assert!(lines.iter().any(|l| l.contains("file1.txt") && l.contains("")));
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("file1.txt") && l.contains(""))
+    );
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }

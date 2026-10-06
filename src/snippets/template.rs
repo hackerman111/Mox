@@ -16,7 +16,7 @@ pub fn extract_parameters(template: &str) -> Vec<TemplateParam> {
         if ch == '<' {
             let mut end_idx = None;
             let mut inner = String::new();
-            while let Some((idx, c)) = chars.next() {
+            for (idx, c) in chars.by_ref() {
                 if c == '>' {
                     end_idx = Some(idx);
                     break;
@@ -48,7 +48,7 @@ pub fn substitute_parameters(template: &str, values: &[(String, String)]) -> Str
         if ch == '<' {
             let mut end_idx = None;
             let mut inner = String::new();
-            while let Some((idx, c)) = chars.next() {
+            for (idx, c) in chars.by_ref() {
                 if c == '>' {
                     end_idx = Some(idx);
                     break;
