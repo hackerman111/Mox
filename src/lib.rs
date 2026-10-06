@@ -16,6 +16,7 @@ pub mod persist;
 pub mod process;
 pub mod projects;
 pub mod scroll;
+pub mod snippets;
 pub mod state;
 pub mod tea;
 pub mod tmux;
