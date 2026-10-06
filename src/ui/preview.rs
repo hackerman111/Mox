@@ -52,16 +52,65 @@ pub fn local_file(path: &Path) -> Result<Vec<String>, String> {
     Ok(to_lines(&String::from_utf8_lossy(&bytes)))
 }
 
-/// Loads at most 200 directory entries as sorted, sanitized preview lines.
+/// Loads at most 200 directory entries formatted as a hierarchical tree.
 pub fn local_directory(path: &Path) -> Result<Vec<String>, String> {
-    let mut entries = std::fs::read_dir(path)
-        .map_err(|e| e.to_string())?
-        .take(200)
+    let mut lines = Vec::new();
+    collect_directory_tree(path, "", 0, 3, 200, &mut lines)?;
+    if lines.is_empty() {
+        lines.push("(empty directory)".into());
+    }
+    Ok(lines)
+}
+
+fn collect_directory_tree(
+    dir: &Path,
+    prefix: &str,
+    depth: usize,
+    max_depth: usize,
+    max_lines: usize,
+    out: &mut Vec<String>,
+) -> Result<(), String> {
+    if depth >= max_depth || out.len() >= max_lines {
+        return Ok(());
+    }
+    let Ok(entries_read) = std::fs::read_dir(dir) else {
+        return Ok(());
+    };
+    let mut items = entries_read
         .filter_map(Result::ok)
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .collect::<Vec<_>>();
-    entries.sort();
-    Ok(to_lines(&entries.join("\n")))
+
+    // Sort: directories first, then alphabetical by name
+    items.sort_by(|a, b| {
+        let a_is_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let b_is_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        b_is_dir.cmp(&a_is_dir).then_with(|| a.file_name().cmp(&b.file_name()))
+    });
+
+    let count = items.len();
+    for (i, entry) in items.into_iter().enumerate() {
+        if out.len() >= max_lines {
+            break;
+        }
+        let is_last = i == count - 1;
+        let connector = if is_last { "└── " } else { "├── " };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+
+        let (icon, label) = if is_dir {
+            (" ", format!("{name}/"))
+        } else {
+            (" ", name)
+        };
+
+        out.push(format!("{prefix}{connector}{icon}{label}"));
+
+        if is_dir && depth + 1 < max_depth {
+            let next_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            collect_directory_tree(&entry.path(), &next_prefix, depth + 1, max_depth, max_lines, out)?;
+        }
+    }
+    Ok(())
 }
 
 fn to_lines(text: &str) -> Vec<String> {
