@@ -28,6 +28,7 @@ pub enum FeatureAction {
     SaveHistory,
     ClearHistory,
     Suspend,
+    Snippets,
 }
 impl FeatureAction {
     pub fn name(self) -> String {
@@ -56,6 +57,7 @@ impl FeatureAction {
             Self::SaveHistory => "save complete history",
             Self::ClearHistory => "clear pane history",
             Self::Suspend => "suspend local client",
+            Self::Snippets => "favorite commands & snippets",
         }
     }
 }
@@ -168,6 +170,7 @@ fn execute(action: FeatureAction, socket: Option<&str>) -> Result<(), String> {
                 _ => crate::logging::save(socket, &pane, &path, action == SaveHistory),
             }
         }
+        Snippets => crate::snippets::run_snippets_panel(socket),
     }
 }
 pub fn catalog(root: &KeyNode) -> Vec<(String, String, KeyAction)> {

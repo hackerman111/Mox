@@ -117,6 +117,12 @@ pub enum Commands {
         #[arg(long, global = true)]
         socket: Option<String>,
     },
+    Snippets {
+        #[arg(long)]
+        socket: Option<String>,
+        #[arg(long)]
+        popup: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -473,6 +479,13 @@ pub fn run(command: Commands) -> Result<(), String> {
                 Ok(())
             }
         },
+        Commands::Snippets { socket, popup } => {
+            if popup {
+                launch(socket.as_deref(), "snippets")
+            } else {
+                crate::snippets::run_snippets_panel(socket.as_deref())
+            }
+        }
     }
 }
 fn launch(socket: Option<&str>, subcommand: &str) -> Result<(), String> {

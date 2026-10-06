@@ -263,6 +263,11 @@ pub fn build_default_keymap() -> KeyNode {
         ),
         KeyNode::new_action("w", "tree navigator", KeyAction::Navigator),
         KeyNode::new_action("s", "tree navigator", KeyAction::Navigator),
+        KeyNode::new_action(
+            "c",
+            "favorite commands & snippets",
+            KeyAction::Feature(crate::actions::FeatureAction::Snippets),
+        ),
         KeyNode::new_action("t", "tea timer", KeyAction::TeaTimer),
         KeyNode::new_action("o", "last window", KeyAction::Tmux("last-window".into())),
         KeyNode::new_action(
@@ -459,6 +464,11 @@ pub fn build_default_keymap() -> KeyNode {
             "palette",
             KeyAction::Feature(crate::actions::FeatureAction::Palette),
         ),
+        KeyNode::new_action(
+            "C",
+            "favorite commands & snippets",
+            KeyAction::Feature(crate::actions::FeatureAction::Snippets),
+        ),
         // Exits to Insert Mode
         KeyNode::new_action("i", "insert mode", KeyAction::ExitModal),
         KeyNode::new_action("Escape", "insert mode", KeyAction::ExitModal),
@@ -481,5 +491,21 @@ pub fn build_default_keymap() -> KeyNode {
         action: None,
         children: root_children,
         sticky: true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keymap_contains_snippets_bindings() {
+        let keymap = build_default_keymap();
+        let root_c = keymap.children.iter().find(|n| n.key == "C");
+        assert!(root_c.is_some(), "Key 'C' must be bound to snippets in root table");
+
+        let goto = keymap.children.iter().find(|n| n.key == "g").unwrap();
+        let goto_c = goto.children.iter().find(|n| n.key == "c");
+        assert!(goto_c.is_some(), "Key 'g c' must be bound to snippets in goto table");
     }
 }
