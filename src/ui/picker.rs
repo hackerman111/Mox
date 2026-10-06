@@ -98,11 +98,31 @@ impl PickerState {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum PickerAction {
+    Selected(usize),
+    Custom(usize, char),
+    Cancel,
+}
+
 pub fn run_picker(
     title: &str,
     items: &[PickerItem],
     socket: Option<&str>,
 ) -> Result<Option<usize>, String> {
+    match run_picker_extended(title, items, socket, &[], None)? {
+        PickerAction::Selected(idx) => Ok(Some(idx)),
+        _ => Ok(None),
+    }
+}
+
+pub fn run_picker_extended(
+    title: &str,
+    items: &[PickerItem],
+    socket: Option<&str>,
+    custom_chars: &[char],
+    hints_override: Option<&str>,
+) -> Result<PickerAction, String> {
     let _guard = crate::tui::TuiGuard::enter().map_err(|e| e.to_string())?;
     let mut state = PickerState::default();
     state.filter(
@@ -205,9 +225,10 @@ pub fn run_picker(
 
             queue!(out, cursor::MoveTo(0, height.saturating_sub(1) as u16))
                 .map_err(|e| e.to_string())?;
+            let hints_msg = hints_override.unwrap_or("type: filter · ↑↓/C-j/k: select · Enter: accept · Esc: cancel");
             render_hints(
                 &mut out,
-                "type: filter · ↑↓/C-j/k: select · Enter: accept · Esc: cancel",
+                hints_msg,
                 width,
                 &theme,
             )
@@ -228,6 +249,18 @@ pub fn run_picker(
         }
         if let Event::Key(key) = event::read().map_err(|e| e.to_string())? {
             needs_redraw = true;
+            if key.kind == KeyEventKind::Press {
+                if let KeyCode::Char(c) = key.code {
+                    if (key.modifiers.contains(KeyModifiers::CONTROL)
+                        || key.modifiers.contains(KeyModifiers::ALT))
+                        && custom_chars.contains(&c)
+                    {
+                        if let Some(orig) = original {
+                            return Ok(PickerAction::Custom(orig, c));
+                        }
+                    }
+                }
+            }
             match state.input(key, state.indices.len(), true) {
                 Input::Changed => state.filter(
                     items
@@ -235,8 +268,8 @@ pub fn run_picker(
                         .enumerate()
                         .map(|(i, item)| (i, item.label.as_str())),
                 ),
-                Input::Accept => return Ok(original),
-                Input::Cancel => return Ok(None),
+                Input::Accept => return Ok(original.map(PickerAction::Selected).unwrap_or(PickerAction::Cancel)),
+                Input::Cancel => return Ok(PickerAction::Cancel),
                 Input::None => {}
             }
         }

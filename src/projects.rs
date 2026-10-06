@@ -2,7 +2,7 @@
 
 use crate::process::output;
 use crate::tmux::execute_tmux;
-use crate::ui::picker::{PickerItem, run_picker};
+use crate::ui::picker::PickerItem;
 use crate::ui::preview::Preview;
 use std::collections::HashSet;
 use std::fs;
@@ -15,15 +15,16 @@ const MAX_SCAN_ENTRIES: usize = 5_000;
 const MAX_RECENT: usize = 100;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Project {
-    path: PathBuf,
-    session: Option<ExistingSession>,
+pub struct Project {
+    pub path: PathBuf,
+    pub session: Option<ExistingSession>,
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Clone)]
-struct ExistingSession {
-    id: String,
-    name: String,
+pub struct ExistingSession {
+    pub id: String,
+    pub name: String,
 }
 
 /// Discover projects, show them in the picker, then switch to or create a session.
@@ -65,22 +66,48 @@ pub(crate) fn discover(socket: Option<&str>, roots: &[PathBuf]) -> Result<Vec<Pr
         add_project(&mut projects, &mut seen, cwd, None);
     }
 
+    let favorites_path = favorites_file().ok();
+    let favorites = favorites_path.as_deref().map(read_favorites).unwrap_or_default();
+    sort_projects_with_favorites(&mut projects, &favorites);
+
     Ok(projects)
 }
 
 pub fn run(socket: Option<&str>, roots: &[PathBuf]) -> Result<(), String> {
-    let projects = discover(socket, roots)?;
-    let items: Vec<_> = projects.iter().map(item).collect();
-    if let Some(index) = run_picker("Projects", &items, socket)? {
-        activate(socket, &projects[index])?;
+    let mut projects = discover(socket, roots)?;
+    let fav_file = favorites_file().ok();
+
+    loop {
+        let items: Vec<_> = projects.iter().map(item).collect();
+        match crate::ui::picker::run_picker_extended(
+            "Projects",
+            &items,
+            socket,
+            &['f'],
+            Some("type: filter · ↑↓/C-j/k: select · C-f: favorite (★) · Enter: accept · Esc: cancel"),
+        )? {
+            crate::ui::picker::PickerAction::Selected(index) => {
+                activate(socket, &projects[index])?;
+                break;
+            }
+            crate::ui::picker::PickerAction::Custom(index, 'f') => {
+                if let (Some(favs_path), Some(proj)) = (&fav_file, projects.get(index)) {
+                    let _ = toggle_favorite(favs_path, &proj.path);
+                    let favs = read_favorites(favs_path);
+                    sort_projects_with_favorites(&mut projects, &favs);
+                }
+            }
+            _ => break,
+        }
     }
     Ok(())
 }
 
 pub(crate) fn item(project: &Project) -> PickerItem {
+    let star = if project.is_favorite { "★ " } else { "" };
     let label = match &project.session {
-        Some(session) => format!("{} · {}", session.name, project.path.display()),
-        None => project.path.display().to_string(),
+        Some(session) => format!("{star}{} · {}", session.name, project.path.display()),
+        None => format!("{star}{}", project.path.display()),
     };
     PickerItem {
         id: project.path.to_string_lossy().into_owned(),
@@ -277,6 +304,52 @@ fn add_project(
     projects.push(Project {
         path: canonical,
         session,
+        is_favorite: false,
+    });
+}
+
+pub fn favorites_file() -> Result<PathBuf, String> {
+    Ok(crate::state::directory()?.join("projects-favorites"))
+}
+
+pub fn read_favorites(file: &Path) -> HashSet<PathBuf> {
+    fs::read_to_string(file)
+        .unwrap_or_default()
+        .lines()
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+        .collect()
+}
+
+pub fn toggle_favorite(file: &Path, path: &Path) -> Result<bool, String> {
+    let mut favs = read_favorites(file);
+    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let is_fav = if favs.contains(&canonical) {
+        favs.remove(&canonical);
+        false
+    } else {
+        favs.insert(canonical);
+        true
+    };
+    let Some(parent) = file.parent() else {
+        return Err("Favorites file has no parent directory".to_owned());
+    };
+    fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+    let contents = favs
+        .iter()
+        .map(|entry| entry.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("\n");
+    crate::state::atomic_write(file, contents.as_bytes())?;
+    Ok(is_fav)
+}
+
+pub fn sort_projects_with_favorites(projects: &mut [Project], favorites: &HashSet<PathBuf>) {
+    for p in projects.iter_mut() {
+        p.is_favorite = favorites.contains(&p.path);
+    }
+    projects.sort_by(|a, b| {
+        b.is_favorite.cmp(&a.is_favorite)
     });
 }
 
