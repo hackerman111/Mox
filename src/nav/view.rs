@@ -73,6 +73,7 @@ pub fn render_navigator_with_theme<W: Write>(
             let row = TreeRow {
                 depth,
                 is_collapsed: collapsed,
+                icon: None,
                 label: &label,
                 badge: None,
                 is_active: active,

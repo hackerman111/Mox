@@ -142,6 +142,7 @@ pub fn render_list_row<W: Write>(
 pub struct TreeRow<'a> {
     pub depth: usize,
     pub is_collapsed: Option<bool>, // None = leaf, Some(true) = ▶, Some(false) = ▼
+    pub icon: Option<(&'a str, Color)>,
     pub label: &'a str,
     pub badge: Option<(&'a str, Color)>,
     pub is_active: bool,
@@ -161,7 +162,11 @@ pub fn render_tree_row<W: Write>(
     let (bg, fg) = if row.is_selected {
         (theme.selection_bg, theme.selection_fg)
     } else {
-        (theme.bg, theme.fg)
+        match row.depth {
+            0 => (theme.bg, theme.accent),
+            1 => (theme.bg, theme.fg),
+            _ => (theme.bg, theme.border),
+        }
     };
 
     let indent_str = match row.depth {
@@ -176,9 +181,14 @@ pub fn render_tree_row<W: Write>(
         None => "",
     };
 
-    let active_marker = if row.is_active { " *" } else { "" };
+    let icon_str = match row.icon {
+        Some((icon, _)) => icon,
+        None => "",
+    };
 
-    let mut line_buf = format!("{}{}{}{}", indent_str, fold_icon, row.label, active_marker);
+    let active_marker = if row.is_active { " ●" } else { "" };
+
+    let mut line_buf = format!("{}{}{}{}{}", indent_str, fold_icon, icon_str, row.label, active_marker);
 
     if let Some((b_text, _)) = row.badge {
         line_buf.push_str(&format!(" {b_text}"));
